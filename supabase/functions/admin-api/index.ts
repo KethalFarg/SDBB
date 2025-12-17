@@ -158,7 +158,7 @@ serve(async (req) => {
 
       if (error) throw error;
 
-      const overlaps = [];
+      const overlaps: any[] = [];
 
       for (const p of (practices as Practice[])) {
         if (p.lat == null || p.lng == null) continue;
@@ -459,6 +459,67 @@ serve(async (req) => {
       console.info(`ADMIN_TEST_CLEANUP — deleted ${deletedCount} test leads`);
 
       return new Response(JSON.stringify({ deleted_count: deletedCount }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // POST /admin/users/link-practice
+    if (req.method === 'POST' && path.endsWith('/admin/users/link-practice')) {
+      const { user_id, practice_id, role } = await req.json();
+
+      if (!user_id || !practice_id) {
+        return new Response(JSON.stringify({ error: 'user_id and practice_id are required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // Check if already exists
+      const { data: existing, error: checkError } = await supabase
+        .from('practice_users')
+        .select('*')
+        .eq('user_id', user_id)
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+
+      if (existing) {
+        if (existing.practice_id === practice_id) {
+          return new Response(JSON.stringify({ message: 'User already linked to this practice', data: existing }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        } else {
+          return new Response(JSON.stringify({ error: 'User is already linked to a different practice' }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+      }
+
+      // Validate practice exists
+      const { data: practice, error: practiceError } = await supabase
+        .from('practices')
+        .select('id')
+        .eq('id', practice_id)
+        .single();
+
+      if (practiceError || !practice) {
+        return new Response(JSON.stringify({ error: 'Practice not found' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // Insert
+      const { data: inserted, error: insertError } = await supabase
+        .from('practice_users')
+        .insert({
+          user_id,
+          practice_id,
+          role: role || 'practice_user'
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      // Audit log
+      await supabase.from('audit_log').insert({
+        entity_type: 'practice_user',
+        entity_id: user_id,
+        action: 'link_user',
+        performed_by: adminUserId,
+        metadata: { practice_id, role: role || 'practice_user' }
+      });
+
+      return new Response(JSON.stringify({ data: inserted }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 201 });
     }
 
     // GET /designation_review

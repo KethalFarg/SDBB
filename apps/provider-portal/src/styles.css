@@ -129,6 +129,38 @@ a:hover {
   border-top: 1px solid rgba(255,255,255,0.1);
 }
 
+.user-info {
+  margin-bottom: 1rem;
+  padding: 0 0.5rem;
+}
+
+.user-email {
+  display: block;
+  font-size: 0.75rem;
+  color: rgba(255,255,255,0.5);
+  word-break: break-all;
+  margin-bottom: 0.25rem;
+}
+
+.user-practice {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: white;
+}
+
+.no-practice-pill {
+  display: inline-block;
+  font-size: 0.6875rem;
+  background-color: rgba(255, 107, 107, 0.2);
+  color: #ff6b6b;
+  padding: 0.125rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
 .main-content {
   flex: 1;
   padding: 2.5rem;
@@ -265,7 +297,66 @@ a:hover {
 .status-no-coverage { background-color: #fef2f2; color: #991b1b; }
 .status-new { background-color: #eff6ff; color: #1e40af; }
 
-/* Detail View Styles */
+/* Dashboard Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2.5rem;
+}
+
+.stat-card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.stat-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.stat-value {
+  display: block;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  line-height: 1;
+}
+
+.stat-subtext {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-light);
+  margin-top: 0.5rem;
+}
+
+.dashboard-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+  gap: 2rem;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));

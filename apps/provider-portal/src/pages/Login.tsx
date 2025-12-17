@@ -12,7 +12,7 @@ export function Login() {
   const [loading, setLoading] = useState(false);
 
   if (session) {
-    navigate('/leads');
+    navigate('/dashboard');
   }
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -23,7 +23,7 @@ export function Login() {
     if (error) {
       setError(error.message);
     } else {
-      navigate('/leads');
+      navigate('/dashboard');
     }
     setLoading(false);
   };
