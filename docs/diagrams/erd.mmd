@@ -1,0 +1,116 @@
+erDiagram
+  practices {
+    uuid id PK
+    text name
+    text address
+    double lat
+    double lng
+    numeric radius_miles
+    text status
+    jsonb profile_payload
+    jsonb booking_settings
+    timestamptz created_at
+    timestamptz updated_at
+  }
+
+  routing_rules {
+    uuid id PK
+    uuid practice_id FK
+    numeric radius_miles
+    boolean exclusivity
+    int priority
+    text status
+    timestamptz effective_from
+    timestamptz effective_to
+    uuid created_by
+    timestamptz created_at
+  }
+
+  zip_geo {
+    text zip PK
+    double lat
+    double lng
+    text source
+    timestamptz updated_at
+  }
+
+  leads {
+    uuid id PK
+    uuid practice_id FK
+    text routing_outcome
+    text designation_reason
+    text first_name
+    text last_name
+    text email
+    text phone
+    text zip
+    text source
+    jsonb routing_snapshot
+    timestamptz created_at
+  }
+
+  assessments {
+    uuid id PK
+    uuid lead_id FK
+    uuid practice_id FK
+    jsonb responses
+    jsonb report_payload
+    timestamptz created_at
+  }
+
+  availability_blocks {
+    uuid id PK
+    uuid practice_id FK
+    int day_of_week
+    time start_time
+    time end_time
+    text type
+    timestamptz created_at
+  }
+
+  appointments {
+    uuid id PK
+    uuid lead_id FK
+    uuid practice_id FK
+    timestamptz start_time
+    timestamptz end_time
+    text status
+    text sales_outcome
+    text objection
+    text source
+    text created_by
+    timestamptz created_at
+  }
+
+  designation_review {
+    uuid id PK
+    uuid lead_id FK
+    text reason_code
+    text notes
+    uuid assigned_practice_id FK
+    uuid resolved_by
+    timestamptz resolved_at
+    timestamptz created_at
+  }
+
+  audit_log {
+    uuid id PK
+    text entity_type
+    uuid entity_id
+    text action
+    text performed_by
+    jsonb metadata
+    timestamptz created_at
+  }
+
+  practices ||--o{ routing_rules : "has rules"
+  practices ||--o{ leads : "receives"
+  practices ||--o{ assessments : "owns"
+  practices ||--o{ availability_blocks : "defines"
+  practices ||--o{ appointments : "books"
+
+  leads ||--o{ assessments : "may have"
+  leads ||--o{ appointments : "may have"
+  leads ||--o{ designation_review : "may enter"
+
+  practices ||--o{ designation_review : "assigned_to (manual)"

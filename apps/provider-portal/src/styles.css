@@ -1,0 +1,40 @@
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #f7f7f7;
+}
+
+a {
+  color: #0f62fe;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 220px;
+  background: #fff;
+  border-right: 1px solid #e5e5e5;
+  padding: 1rem;
+}
+
+.content {
+  flex: 1;
+  padding: 1.5rem;
+}
+
+.nav-section {
+  margin-bottom: 1.5rem;
+}
+
+button {
+  cursor: pointer;
+}
+

@@ -1,0 +1,85 @@
+flowchart TB
+  %% ============================
+  %% Routing + Lead Ingestion
+  %% ============================
+
+  subgraph A["A) Lead Ingestion + Radius Routing (ZIP input)"]
+    A1["Lead Payload Received<br/>(website / quiz / ads / manual)"] --> A2["POST /routing/resolve (zip)"]
+    A2 --> A3{"ZIP exists<br/>in zip_geo?"}
+    A3 -- "No" --> A9["Outcome: DESIGNATION<br/>reason=zip_not_found"]
+    A3 -- "Yes" --> A4["Compute distances<br/>zip centroid -> practice lat/lng"]
+    A4 --> A5["Filter: active practices where distance <= radius_miles"]
+    A5 --> A6{"# matches"}
+    A6 -- "1" --> A7["Outcome: ASSIGNED<br/>practice_id set"]
+    A6 -- "0" --> A9["Outcome: DESIGNATION<br/>reason=no_provider_in_radius"]
+    A6 -- ">1" --> A9["Outcome: DESIGNATION<br/>reason=multiple_providers_match"]
+    A7 --> A8["Create Lead<br/>routing_snapshot saved"]
+    A9 --> A10["Create Lead (practice_id null)<br/>routing_snapshot saved"]
+    A10 --> A11["Create DesignationReview row"]
+    A8 --> A12["Emit event: lead.created"]
+    A11 --> A12
+    A12 --> A13["Sync Lead to GHL<br/>(assigned vs designation destination)"]
+  end
+
+  %% ============================
+  %% Assessment creation / report button logic
+  %% ============================
+  subgraph B["B) Assessment + Report Personalization"]
+    B1["Assessment Completed<br/>(quiz)"] --> B2{"Lead exists?"}
+    B2 -- "No" --> B3["Create Lead first<br/>(includes routing)"]
+    B2 -- "Yes" --> B4["Link to existing lead"]
+    B3 --> B5["Create Assessment"]
+    B4 --> B5
+    B5 --> B6["Compute report_payload<br/>(practice snapshot + answers)"]
+    B6 --> B7["Portal UI: show Report button ONLY<br/>when assessment exists"]
+  end
+
+  %% ============================
+  %% Booking (Hold/Confirm) - used by Call Center, Website (1.5), AI (phase 1)
+  %% ============================
+  subgraph C["C) Booking Engine (Portal Source of Truth)"]
+    C1["Booking Client<br/>(Portal UI / Website / AI Agent)"] --> C2["GET /practices/:id/availability"]
+    C2 --> C3["User/Agent selects slot"]
+    C3 --> C4["POST /appointments/hold<br/>(Idempotency-Key)"]
+    C4 --> C5{"Hold succeeded?"}
+    C5 -- "No" --> C6["Return error<br/>(slot taken/invalid)"]
+    C5 -- "Yes" --> C7["POST /appointments/confirm<br/>(hold_id, Idempotency-Key)"]
+    C7 --> C8["Appointment created<br/>status=scheduled"]
+    C8 --> C9["Emit event: appointment.created"]
+    C9 --> C10["Sync appointment to GHL<br/>(visibility + redundancy)"]
+    C10 --> C11["Later: PATCH /appointments/:id<br/>status + outcome + objection"]
+    C11 --> C12["Emit event: appointment.updated"]
+    C12 --> C13["Sync updates to GHL"]
+  end
+
+  %% ============================
+  %% Designation Review resolution
+  %% ============================
+  subgraph D["D) Designation Review (Admin)"]
+    D1["Admin opens Designation Queue"] --> D2["View lead + context + nearby practices"]
+    D2 --> D3["Assign to practice + reason + notes"]
+    D3 --> D4["Update Lead.practice_id<br/>routing_outcome=assigned"]
+    D4 --> D5["Update DesignationReview as resolved"]
+    D5 --> D6["Write audit_log entry"]
+    D6 --> D7["Sync updated assignment to GHL"]
+  end
+
+  %% ============================
+  %% Admin impersonation
+  %% ============================
+  subgraph E["E) Admin Impersonation (View as Practice)"]
+    E1["Admin selects practice"] --> E2["POST /admin/impersonate"]
+    E2 --> E3["Receives temporary practice-session token"]
+    E3 --> E4["Admin views portal as practice"]
+    E4 --> E5["Impersonation session logged<br/>(audit_log)"]
+  end
+
+  %% ============================
+  %% External AI Agent integration (Phase 1)
+  %% ============================
+  subgraph F["F) AI Calling/Booking Agent (Phase 1 Test)"]
+    F1["lead.created event"] --> F2["Agent service decides to call"]
+    F2 --> F3["Agent speaks + qualifies"]
+    F3 --> F4["Agent calls Booking API<br/>(availability -> hold -> confirm)"]
+    F4 --> F5["Appointment created in portal"]
+  end

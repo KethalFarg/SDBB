@@ -1,0 +1,42 @@
+flowchart LR
+  %% ============================
+  %% Admin Map View (Pins + Radius Circles)
+  %% ============================
+
+  subgraph UI["Admin Portal — Map View UI"]
+    UI1["Map loads"] --> UI2["GET /admin/practices (lat/lng, radius_miles, status)"]
+    UI2 --> UI3["Render pins for all practices"]
+    UI2 --> UI4["Render radius circles for each practice"]
+    UI3 --> UI5["Click pin OR select practice from list"]
+    UI5 --> UI6["Open Practice Side Panel"]
+    UI6 --> UI7["Edit radius_miles (input/slider)"]
+    UI7 --> UI8["Preview circle updates live (no save yet)"]
+    UI6 --> UI9["Toggle status active/paused"]
+    UI6 --> UI10["Edit address (optional)"]
+    UI10 --> UI11["Geocode address -> lat/lng (provider API)"]
+    UI11 --> UI12["Preview pin moves + circle redraws live"]
+    UI8 --> UI13["Overlap detector runs (client-side)"]
+    UI12 --> UI13
+    UI13 --> UI14{"Overlap detected?"}
+    UI14 -- "No" --> UI15["Enable Save"]
+    UI14 -- "Yes" --> UI16["Show warning + highlight overlap region"]
+    UI16 --> UI17["Allow save only after confirm (admin) OR block in MVP"]
+    UI17 --> UI15
+    UI15 --> UI18["PATCH /admin/practices/:id (radius/status/latlng)"]
+    UI18 --> UI19["Write audit_log (before/after)"]
+    UI19 --> UI20["Map refresh / re-render circles"]
+  end
+
+  %% ============================
+  %% Backend Responsibilities
+  %% ============================
+
+  subgraph BE["Backend Responsibilities"]
+    BE1["Admin auth required"] --> BE2["Fetch practices list"]
+    BE2 --> BE3["Persist practice edits"]
+    BE3 --> BE4["Audit log entry"]
+    BE3 --> BE5["Optional: server-side overlap check (future)"]
+  end
+
+  UI18 --> BE3
+  UI2 --> BE2
