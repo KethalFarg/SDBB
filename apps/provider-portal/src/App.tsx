@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Login } from './pages/Login';
 import { Leads } from './pages/Leads';
@@ -10,30 +10,49 @@ import { useSession } from './hooks/useSession';
 
 function Layout({ children }: { children: React.ReactNode }) {
   const { session } = useSession();
+  const location = useLocation();
 
   const logout = async () => {
     await supabase.auth.signOut();
   };
 
+  const isActive = (path: string) => location.pathname.startsWith(path);
+
   return (
-    <div className="layout">
-      <div className="sidebar">
-        <div className="nav-section">
-          <h3>Provider Portal</h3>
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="sidebar-header">
+          <h1 className="brand-title">Spinal</h1>
+          <span className="brand-subtitle">Provider Portal</span>
         </div>
-        <div className="nav-section">
-          <div><Link to="/leads">Leads</Link></div>
-          <div><Link to="/appointments">Appointments</Link></div>
+        
+        <nav className="nav-menu">
+          <Link 
+            to="/leads" 
+            className={`nav-link ${isActive('/leads') ? 'active' : ''}`}
+          >
+            Leads
+          </Link>
+          <Link 
+            to="/appointments" 
+            className={`nav-link ${isActive('/appointments') ? 'active' : ''}`}
+          >
+            Appointments
+          </Link>
+        </nav>
+
+        <div className="sidebar-footer">
+          {session && (
+            <button className="btn btn-outline" style={{ width: '100%', color: 'white', borderColor: 'rgba(255,255,255,0.2)' }} onClick={logout}>
+              Logout
+            </button>
+          )}
         </div>
-        {session && (
-          <div className="nav-section">
-            <button onClick={logout}>Logout</button>
-          </div>
-        )}
-      </div>
-      <div className="content">
+      </aside>
+
+      <main className="main-content">
         {children}
-      </div>
+      </main>
     </div>
   );
 }

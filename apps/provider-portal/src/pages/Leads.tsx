@@ -58,60 +58,74 @@ export function Leads() {
   }, [q, leads]);
 
   const statusFor = (lead: Lead) => {
-    if (lead.practice_id) return 'Assigned';
-    if (lead.routing_outcome === 'designation') return 'Needs Review';
-    if (lead.routing_outcome === 'no_provider_in_radius') return 'No Coverage';
-    return 'New';
+    if (lead.practice_id) return <span className="status-pill status-assigned">Assigned</span>;
+    if (lead.routing_outcome === 'designation') return <span className="status-pill status-review">Needs Review</span>;
+    if (lead.routing_outcome === 'no_provider_in_radius') return <span className="status-pill status-no-coverage">No Coverage</span>;
+    return <span className="status-pill status-new">New</span>;
   };
 
-  if (!session) return <div>Loading session...</div>;
+  if (!session) return <div className="main-content">Loading session...</div>;
 
   return (
     <div>
-      <h2>Leads</h2>
-      <div style={{ marginBottom: '0.75rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+        <h2>Leads</h2>
         <input
           type="text"
-          placeholder="Search by id, email, phone, zip, name"
+          className="input-search"
+          placeholder="Search leads..."
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          style={{ width: '320px', padding: '0.5rem' }}
         />
       </div>
-      {error && <div style={{ color: 'red', marginBottom: '0.5rem' }}>{error}</div>}
-      {loading && <div>Loading...</div>}
-      {!loading && filtered.length === 0 && <div>No leads found.</div>}
+
+      {error && <div className="card" style={{ color: '#991b1b', backgroundColor: '#fef2f2', border: '1px solid #fee2e2' }}>{error}</div>}
+      
+      {loading && <div style={{ textAlign: 'center', padding: '3rem' }}>Loading leads...</div>}
+      
+      {!loading && filtered.length === 0 && (
+        <div className="card" style={{ textAlign: 'center', padding: '3rem', color: 'var(--color-text-muted)' }}>
+          No leads found matching your search.
+        </div>
+      )}
+
       {!loading && filtered.length > 0 && (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: '0.25rem' }}>Created</th>
-              <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: '0.25rem' }}>Name</th>
-              <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: '0.25rem' }}>Phone</th>
-              <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: '0.25rem' }}>Email</th>
-              <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: '0.25rem' }}>ZIP</th>
-              <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: '0.25rem' }}>Status</th>
-              <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: '0.25rem' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((lead) => (
-              <tr key={lead.id}>
-                <td style={{ padding: '0.25rem', borderBottom: '1px solid #eee' }}>{lead.created_at}</td>
-                <td style={{ padding: '0.25rem', borderBottom: '1px solid #eee' }}>
-                  {(lead.first_name || lead.last_name) ? `${lead.first_name ?? ''} ${lead.last_name ?? ''}`.trim() : 'N/A'}
-                </td>
-                <td style={{ padding: '0.25rem', borderBottom: '1px solid #eee' }}>{lead.phone ?? 'N/A'}</td>
-                <td style={{ padding: '0.25rem', borderBottom: '1px solid #eee' }}>{lead.email ?? 'N/A'}</td>
-                <td style={{ padding: '0.25rem', borderBottom: '1px solid #eee' }}>{lead.zip ?? 'N/A'}</td>
-                <td style={{ padding: '0.25rem', borderBottom: '1px solid #eee' }}>{statusFor(lead)}</td>
-                <td style={{ padding: '0.25rem', borderBottom: '1px solid #eee' }}>
-                  <Link to={`/leads/${lead.id}`}>View</Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div className="table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Created</th>
+                  <th>Name</th>
+                  <th>Phone</th>
+                  <th>Email</th>
+                  <th>ZIP</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((lead) => (
+                  <tr key={lead.id}>
+                    <td>{new Date(lead.created_at).toLocaleDateString()}</td>
+                    <td style={{ fontWeight: 600 }}>
+                      {(lead.first_name || lead.last_name) ? `${lead.first_name ?? ''} ${lead.last_name ?? ''}`.trim() : 'N/A'}
+                    </td>
+                    <td>{lead.phone ?? 'N/A'}</td>
+                    <td>{lead.email ?? 'N/A'}</td>
+                    <td>{lead.zip ?? 'N/A'}</td>
+                    <td>{statusFor(lead)}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <Link to={`/leads/${lead.id}`} className="btn btn-outline btn-sm">
+                        View Details
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </div>
   );
