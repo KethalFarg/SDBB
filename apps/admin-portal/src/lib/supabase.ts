@@ -3,6 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+console.log("[ADMIN_PORTAL] VITE_SUPABASE_URL =", supabaseUrl);
+console.log("[ADMIN_PORTAL] anon key present =", !!supabaseAnonKey);
+
 let supabase: ReturnType<typeof createClient> | null = null;
 
 if (!supabaseUrl || !supabaseAnonKey) {

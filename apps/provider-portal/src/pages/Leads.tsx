@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useSession } from '../hooks/useSession';
+import { usePracticeId } from '../hooks/usePracticeId';
 
 type Lead = {
   id: string;
@@ -17,30 +18,34 @@ type Lead = {
 
 export function Leads() {
   const { session } = useSession();
+  const { practiceId, loading: loadingPractice, error: practiceError } = usePracticeId();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState('');
 
   useEffect(() => {
-    if (!session) return;
+    if (!practiceId) return;
     fetchLeads();
-  }, [session]);
+  }, [practiceId]);
 
   const fetchLeads = async () => {
     setLoading(true);
     setError(null);
-    const { data, error } = await supabase
-      .from('leads')
-      .select('id, created_at, first_name, last_name, email, phone, zip, routing_outcome, practice_id')
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('leads')
+        .select('id, created_at, first_name, last_name, email, phone, zip, routing_outcome, practice_id')
+        .eq('practice_id', practiceId)
+        .order('created_at', { ascending: false });
 
-    if (error) {
-      setError(error.message);
-    } else {
+      if (fetchError) throw fetchError;
       setLeads(data || []);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const filtered = useMemo(() => {
@@ -65,31 +70,55 @@ export function Leads() {
   };
 
   if (!session) return <div className="main-content">Loading session...</div>;
+  if (loadingPractice) return <div className="main-content">Verifying practice...</div>;
+
+  if (!practiceId) {
+    return (
+      <div className="main-content">
+        <div className="card" style={{ color: '#92400e', backgroundColor: '#fffbeb', border: '1px solid #fef3c7' }}>
+          Your account isn’t linked to a practice yet. Please contact support.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <h2>Leads</h2>
-        <input
-          type="text"
-          className="input-search"
-          placeholder="Search leads..."
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          <button 
+            onClick={fetchLeads} 
+            className="btn btn-outline btn-sm"
+            disabled={loading}
+          >
+            Refresh
+          </button>
+          <input
+            type="text"
+            className="input-search"
+            placeholder="Search leads..."
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+        </div>
       </div>
 
-      {error && <div className="card" style={{ color: '#991b1b', backgroundColor: '#fef2f2', border: '1px solid #fee2e2' }}>{error}</div>}
+      {(error || practiceError) && (
+        <div className="card" style={{ color: '#991b1b', backgroundColor: '#fef2f2', border: '1px solid #fee2e2' }}>
+          {error || practiceError}
+        </div>
+      )}
       
       {loading && <div style={{ textAlign: 'center', padding: '3rem' }}>Loading leads...</div>}
       
-      {!loading && filtered.length === 0 && (
+      {!loading && !error && filtered.length === 0 && (
         <div className="card" style={{ textAlign: 'center', padding: '3rem', color: 'var(--color-text-muted)' }}>
-          No leads found matching your search.
+          {leads.length === 0 ? 'No leads found for your practice.' : 'No leads found matching your search.'}
         </div>
       )}
 
-      {!loading && filtered.length > 0 && (
+      {!loading && !error && filtered.length > 0 && (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <div className="table-container">
             <table className="data-table">
@@ -130,4 +159,3 @@ export function Leads() {
     </div>
   );
 }
-

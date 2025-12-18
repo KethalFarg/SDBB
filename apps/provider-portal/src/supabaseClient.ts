@@ -3,6 +3,9 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
+console.log('🔍 SUPABASE URL:', supabaseUrl)
+console.log('🔍 SUPABASE KEY (prefix):', supabaseAnonKey ? supabaseAnonKey.slice(0, 25) + '...' : '(missing)')
+
 export const envMissing = !supabaseUrl || !supabaseAnonKey
 
 // Provide a safe stub if env vars are missing so the app does not crash.

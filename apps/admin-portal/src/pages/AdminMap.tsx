@@ -42,12 +42,14 @@ export function AdminMap() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!mounted) return;
       setSession(session);
+      console.log("[ADMIN_PORTAL] session user:", session?.user?.id, session?.user?.email);
       if (!session) navigate('/login');
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
       if (!mounted) return;
       setSession(newSession);
+      console.log("[ADMIN_PORTAL] auth change user:", newSession?.user?.id, newSession?.user?.email);
       if (!newSession) {
         setPractices([]);
         clearMarkers();
@@ -91,7 +93,9 @@ export function AdminMap() {
       const res = await fetch(`${API_BASE}/admin/map/practices?include_missing=${includeMissing}`, {
         headers: { 'Authorization': `Bearer ${activeSession.access_token}` }
       });
+      console.log("admin/map/practices status:", res.status);
       const json = await res.json();
+      console.log("admin/map/practices body:", json);
       setPractices(json.data || []);
       renderMap(json.data || []);
       updateRadii(json.data || []);
@@ -142,7 +146,7 @@ export function AdminMap() {
   const checkOverlaps = async (lat: number, lng: number, radius: number) => {
     if (!session) return;
 
-    const res = await fetch(`${API_BASE}/admin-api/admin/map/preview`, {
+    const res = await fetch(`${API_BASE}/admin/map/preview`, {
       method: 'POST',
       headers: { 
         'Authorization': `Bearer ${session.access_token}`,
@@ -158,7 +162,7 @@ export function AdminMap() {
     e.preventDefault();
     if (!session || !selectedId) return;
 
-    await fetch(`${API_BASE}/admin-api/admin/practices/${selectedId}`, {
+    await fetch(`${API_BASE}/admin/practices/${selectedId}`, {
       method: 'PATCH',
       headers: { 
         'Authorization': `Bearer ${session.access_token}`,
@@ -237,12 +241,20 @@ export function AdminMap() {
 
   return (
     <div style={{ display: 'flex', height: '100vh', flexDirection: 'column' }}>
+      {/* Set VITE_SHOW_DEBUG_BANNER=true to show this banner in dev. */}
+      {import.meta.env.DEV && import.meta.env.VITE_SHOW_DEBUG_BANNER === "true" && session && (
+        <div style={{ padding: "8px 12px", background: "#111", color: "#fff", fontSize: 12 }}>
+          <div><strong>Supabase:</strong> {VITE_SUPABASE_URL}</div>
+          <div><strong>User:</strong> {session?.user?.id}</div>
+          <div><strong>Email:</strong> {session?.user?.email}</div>
+        </div>
+      )}
       {missingEnvs.length > 0 && (
         <div style={{ 
           background: '#ffdddd', color: '#d8000c', padding: '1rem', 
           borderBottom: '1px solid #d8000c', fontWeight: 'bold' 
         }}>
-          ⚠️ Missing Configuration: The following environment variables are missing in <code>apps/admin-portal/.env</code>:
+          WARNING: Missing Configuration: The following environment variables are missing in <code>apps/admin-portal/.env</code>:
           <ul style={{marginTop:'0.5rem', marginBottom:0}}>
             {missingEnvs.map(env => <li key={env}>{env}</li>)}
           </ul>

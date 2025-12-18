@@ -21,6 +21,11 @@ export async function requireAdminAuth(req: Request): Promise<string> {
     throw new Error('Unauthorized: Invalid token');
   }
 
+  console.log("[ADMIN_AUTH] token user:", {
+    id: user?.id,
+    email: user?.email,
+  });
+
   // 2. Check Admin Status (using Service Role)
   const adminClient = createClient(supabaseUrl, supabaseServiceKey);
   
@@ -31,6 +36,11 @@ export async function requireAdminAuth(req: Request): Promise<string> {
     .single();
 
   if (adminError || !adminRecord) {
+    console.log("[ADMIN_AUTH] admin_users lookup:", {
+      lookedUpUserId: user.id,
+      adminRecord,
+      adminError: adminError?.message ?? null,
+    });
     throw new Error('Forbidden: Not an admin');
   }
 

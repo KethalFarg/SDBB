@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { useSession } from '../hooks/useSession';
+import { usePracticeId } from '../hooks/usePracticeId';
 
 type AvailabilityBlock = {
   id: string;
@@ -33,9 +34,9 @@ const DAYS = [
  */
 export function Availability() {
   const { session } = useSession();
+  const { practiceId, loading: loadingPractice, error: practiceError } = usePracticeId();
   const [blocks, setBlocks] = useState<AvailabilityBlock[]>([]);
-  const [practiceId, setPracticeId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Form state
@@ -46,63 +47,28 @@ export function Availability() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!session) return;
-    fetchInitialData();
-  }, [session]);
+    if (!practiceId) return;
+    fetchBlocks();
+  }, [practiceId]);
 
-  const fetchInitialData = async () => {
+  const fetchBlocks = async () => {
     setLoading(true);
     setError(null);
     try {
-      // 1. Get user's practice_id (do NOT use .single() here)
-      const { data: userRows, error: userError } = await supabase
-        .from('practice_users')
-        .select('practice_id')
-        .eq('user_id', session.user.id)
-        .limit(1);
-
-      if (userError) throw userError;
-
-      const pId = userRows?.[0]?.practice_id;
-      if (!pId) {
-        setError("Your account isn’t linked to a practice yet. Please contact support.");
-        setLoading(false);
-        return;
-      }
-      
-      setPracticeId(pId);
-
-      // 2. Fetch blocks (explicitly for this practice)
-      const { data: blocksData, error: blocksError } = await supabase
+      const { data, error: blocksError } = await supabase
         .from('availability_blocks')
         .select('id, practice_id, day_of_week, start_time, end_time, type')
-        .eq('practice_id', pId) // Explicit filter
+        .eq('practice_id', practiceId)
         .order('day_of_week', { ascending: true })
         .order('start_time', { ascending: true });
 
       if (blocksError) throw blocksError;
-      setBlocks(blocksData || []);
+      setBlocks(data || []);
     } catch (err: any) {
       console.error('Error fetching availability:', err);
       setError(err.message || 'Failed to load availability data.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchBlocks = async () => {
-    if (!practiceId) return;
-    const { data, error } = await supabase
-      .from('availability_blocks')
-      .select('id, practice_id, day_of_week, start_time, end_time, type')
-      .eq('practice_id', practiceId)
-      .order('day_of_week', { ascending: true })
-      .order('start_time', { ascending: true });
-
-    if (error) {
-      console.error('Error refreshing blocks:', error);
-    } else {
-      setBlocks(data || []);
     }
   };
 
@@ -175,18 +141,29 @@ export function Availability() {
   };
 
   if (!session) return <div className="main-content">Loading session...</div>;
-  if (loading) return <div className="main-content">Loading availability...</div>;
+  if (loadingPractice) return <div className="main-content">Verifying practice...</div>;
+
+  if (!practiceId) {
+    return (
+      <div className="main-content">
+        <div className="card" style={{ color: '#92400e', backgroundColor: '#fffbeb', border: '1px solid #fef3c7' }}>
+          Your account isn’t linked to a practice yet. Please contact support.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <div style={{ marginBottom: '2rem' }}>
-        <h2 style={{ marginBottom: '0.25rem' }}>Practice Availability</h2>
-        <p style={{ color: 'var(--color-text-muted)', margin: 0 }}>Manage the time blocks when you are available for patient appointments.</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+        <h2 style={{ marginBottom: 0 }}>Practice Availability</h2>
+        <button onClick={fetchBlocks} className="btn btn-outline btn-sm" disabled={loading}>Refresh</button>
       </div>
+      <p style={{ color: 'var(--color-text-muted)', marginTop: '-1.5rem', marginBottom: '2rem' }}>Manage the time blocks when you are available for patient appointments.</p>
 
-      {error && (
+      {(error || practiceError) && (
         <div className="card" style={{ color: '#991b1b', backgroundColor: '#fef2f2', border: '1px solid #fee2e2', marginBottom: '2rem' }}>
-          {error}
+          {error || practiceError}
         </div>
       )}
 
@@ -255,65 +232,68 @@ export function Availability() {
       </div>
 
       {/* Blocks List Grouped by Day */}
-      <div className="dashboard-sections">
-        {DAYS.map((day, dayIdx) => {
-          const dayBlocks = blocks.filter(b => b.day_of_week === dayIdx);
-          
-          return (
-            <div key={day} className="card" style={{ padding: '1.5rem 0', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ padding: '0 1.5rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0, fontSize: '1.125rem' }}>{day}</h3>
-                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
-                  {dayBlocks.length} {dayBlocks.length === 1 ? 'block' : 'blocks'}
-                </span>
-              </div>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '3rem' }}>Loading availability...</div>
+      ) : (
+        <div className="dashboard-sections">
+          {DAYS.map((day, dayIdx) => {
+            const dayBlocks = blocks.filter(b => b.day_of_week === dayIdx);
+            
+            return (
+              <div key={day} className="card" style={{ padding: '1.5rem 0', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ padding: '0 1.5rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.125rem' }}>{day}</h3>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                    {dayBlocks.length} {dayBlocks.length === 1 ? 'block' : 'blocks'}
+                  </span>
+                </div>
 
-              <div className="table-container" style={{ border: 'none', borderRadius: 0, flex: 1 }}>
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Time</th>
-                      <th>Type</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dayBlocks.length === 0 ? (
+                <div className="table-container" style={{ border: 'none', borderRadius: 0, flex: 1 }}>
+                  <table className="data-table">
+                    <thead>
                       <tr>
-                        <td colSpan={3} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-light)', fontSize: '0.875rem' }}>
-                          No blocks scheduled
-                        </td>
+                        <th>Time</th>
+                        <th>Type</th>
+                        <th></th>
                       </tr>
-                    ) : (
-                      dayBlocks.map(block => (
-                        <tr key={block.id}>
-                          <td style={{ fontWeight: 600 }}>
-                            {block.start_time.slice(0, 5)} – {block.end_time.slice(0, 5)}
-                          </td>
-                          <td style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', textTransform: 'capitalize' }}>
-                            {block.type.replace('_', ' ')}
-                          </td>
-                          <td style={{ textAlign: 'right' }}>
-                            <button 
-                              onClick={() => handleDeleteBlock(block.id)}
-                              className="btn btn-outline"
-                              style={{ padding: '0.25rem 0.5rem', color: '#ef4444', borderColor: '#fee2e2' }}
-                              title="Delete block"
-                            >
-                              &times;
-                            </button>
+                    </thead>
+                    <tbody>
+                      {dayBlocks.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-light)', fontSize: '0.875rem' }}>
+                            No blocks scheduled
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ) : (
+                        dayBlocks.map(block => (
+                          <tr key={block.id}>
+                            <td style={{ fontWeight: 600 }}>
+                              {block.start_time.slice(0, 5)} – {block.end_time.slice(0, 5)}
+                            </td>
+                            <td style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', textTransform: 'capitalize' }}>
+                              {block.type.replace('_', ' ')}
+                            </td>
+                            <td style={{ textAlign: 'right' }}>
+                              <button 
+                                onClick={() => handleDeleteBlock(block.id)}
+                                className="btn btn-outline"
+                                style={{ padding: '0.25rem 0.5rem', color: '#ef4444', borderColor: '#fee2e2' }}
+                                title="Delete block"
+                              >
+                                &times;
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
-

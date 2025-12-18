@@ -2,9 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useSession } from '../hooks/useSession';
+import { usePracticeId } from '../hooks/usePracticeId';
 
 export function Dashboard() {
   const { session } = useSession();
+  const { practiceId, loading: loadingPractice, error: practiceError } = usePracticeId();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     leads7d: 0,
@@ -17,9 +19,9 @@ export function Dashboard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!session) return;
+    if (!practiceId) return;
     fetchDashboardData();
-  }, [session]);
+  }, [practiceId]);
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -36,12 +38,12 @@ export function Dashboard() {
         recentLeadsRes,
         upcomingApptsRes
       ] = await Promise.all([
-        supabase.from('leads').select('id', { count: 'exact', head: true }).gte('created_at', since7d),
-        supabase.from('leads').select('id', { count: 'exact', head: true }),
-        supabase.from('appointments').select('id', { count: 'exact', head: true }).gte('start_time', now).eq('status', 'scheduled'),
-        supabase.from('appointments').select('id', { count: 'exact', head: true }),
-        supabase.from('leads').select('id, created_at, first_name, last_name, email, phone, zip').order('created_at', { ascending: false }).limit(5),
-        supabase.from('appointments').select('id, lead_id, start_time, status, source, leads(first_name, last_name)').gte('start_time', now).order('start_time', { ascending: true }).limit(5)
+        supabase.from('leads').select('id', { count: 'exact', head: true }).eq('practice_id', practiceId).gte('created_at', since7d),
+        supabase.from('leads').select('id', { count: 'exact', head: true }).eq('practice_id', practiceId),
+        supabase.from('appointments').select('id', { count: 'exact', head: true }).eq('practice_id', practiceId).gte('start_time', now).eq('status', 'scheduled'),
+        supabase.from('appointments').select('id', { count: 'exact', head: true }).eq('practice_id', practiceId),
+        supabase.from('leads').select('id, created_at, first_name, last_name, email, phone, zip').eq('practice_id', practiceId).order('created_at', { ascending: false }).limit(5),
+        supabase.from('appointments').select('id, lead_id, start_time, status, source, leads(first_name, last_name)').eq('practice_id', practiceId).gte('start_time', now).order('start_time', { ascending: true }).limit(5)
       ]);
 
       if (leads7dRes.error) throw leads7dRes.error;
@@ -78,127 +80,146 @@ export function Dashboard() {
   };
 
   if (!session) return <div className="main-content">Loading session...</div>;
+  if (loadingPractice) return <div className="main-content">Verifying practice...</div>;
+
+  if (!practiceId) {
+    return (
+      <div className="main-content">
+        <div className="card" style={{ color: '#92400e', backgroundColor: '#fffbeb', border: '1px solid #fef3c7' }}>
+          Your account isn’t linked to a practice yet. Please contact support.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <div style={{ marginBottom: '2rem' }}>
-        <h2 style={{ marginBottom: '0.25rem' }}>Practice Overview</h2>
-        <p style={{ color: 'var(--color-text-muted)', margin: 0 }}>Welcome back. Here is what is happening with your practice.</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+        <div style={{ marginBottom: 0 }}>
+          <h2 style={{ marginBottom: '0.25rem' }}>Practice Overview</h2>
+          <p style={{ color: 'var(--color-text-muted)', margin: 0 }}>Welcome back. Here is what is happening with your practice.</p>
+        </div>
+        <button onClick={fetchDashboardData} className="btn btn-outline btn-sm" disabled={loading}>Refresh</button>
       </div>
 
-      {error && (
+      {(error || practiceError) && (
         <div className="card" style={{ color: '#991b1b', backgroundColor: '#fef2f2', border: '1px solid #fee2e2', marginBottom: '2rem' }}>
-          {error}
+          {error || practiceError}
         </div>
       )}
 
-      <div className="stats-grid">
-        <div className="stat-card">
-          <span className="stat-label">New Leads (7d)</span>
-          <span className="stat-value">{stats.leads7d}</span>
-          <span className="stat-subtext">Recent inquiries</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Total Leads</span>
-          <span className="stat-value">{stats.leadsTotal}</span>
-          <span className="stat-subtext">Lifetime total</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Upcoming Appts</span>
-          <span className="stat-value">{stats.apptsUpcoming}</span>
-          <span className="stat-subtext">Scheduled & confirmed</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Total Appts</span>
-          <span className="stat-value">{stats.apptsTotal}</span>
-          <span className="stat-subtext">All appointments</span>
-        </div>
-      </div>
-
-      <div className="dashboard-sections">
-        {/* Recent Leads */}
-        <div className="card" style={{ padding: '1.5rem 0' }}>
-          <div className="section-header" style={{ padding: '0 1.5rem', marginBottom: '1.5rem' }}>
-            <h3 style={{ margin: 0, fontSize: '1.125rem' }}>Recent Leads</h3>
-            <Link to="/leads" style={{ fontSize: '0.875rem', fontWeight: 600 }}>View All &rarr;</Link>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '3rem' }}>Loading dashboard data...</div>
+      ) : (
+        <>
+          <div className="stats-grid">
+            <div className="stat-card">
+              <span className="stat-label">New Leads (7d)</span>
+              <span className="stat-value">{stats.leads7d}</span>
+              <span className="stat-subtext">Recent inquiries</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-label">Total Leads</span>
+              <span className="stat-value">{stats.leadsTotal}</span>
+              <span className="stat-subtext">Lifetime total</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-label">Upcoming Appts</span>
+              <span className="stat-value">{stats.apptsUpcoming}</span>
+              <span className="stat-subtext">Scheduled & confirmed</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-label">Total Appts</span>
+              <span className="stat-value">{stats.apptsTotal}</span>
+              <span className="stat-subtext">All appointments</span>
+            </div>
           </div>
-          
-          <div className="table-container" style={{ border: 'none', borderRadius: 0 }}>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>ZIP</th>
-                  <th>Date</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentLeads.length === 0 ? (
-                  <tr><td colSpan={4} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-light)' }}>No leads yet.</td></tr>
-                ) : (
-                  recentLeads.map(lead => (
-                    <tr key={lead.id}>
-                      <td style={{ fontWeight: 600 }}>{lead.first_name} {lead.last_name}</td>
-                      <td>{lead.zip}</td>
-                      <td style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
-                        {new Date(lead.created_at).toLocaleDateString()}
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <Link to={`/leads/${lead.id}`} style={{ fontSize: '0.8125rem', fontWeight: 600 }}>Details</Link>
-                      </td>
+
+          <div className="dashboard-sections">
+            {/* Recent Leads */}
+            <div className="card" style={{ padding: '1.5rem 0' }}>
+              <div className="section-header" style={{ padding: '0 1.5rem', marginBottom: '1.5rem' }}>
+                <h3 style={{ margin: 0, fontSize: '1.125rem' }}>Recent Leads</h3>
+                <Link to="/leads" style={{ fontSize: '0.875rem', fontWeight: 600 }}>View All &rarr;</Link>
+              </div>
+              
+              <div className="table-container" style={{ border: 'none', borderRadius: 0 }}>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>ZIP</th>
+                      <th>Date</th>
+                      <th></th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                  </thead>
+                  <tbody>
+                    {recentLeads.length === 0 ? (
+                      <tr><td colSpan={4} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-light)' }}>No leads yet.</td></tr>
+                    ) : (
+                      recentLeads.map(lead => (
+                        <tr key={lead.id}>
+                          <td style={{ fontWeight: 600 }}>{lead.first_name} {lead.last_name}</td>
+                          <td>{lead.zip}</td>
+                          <td style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
+                            {new Date(lead.created_at).toLocaleDateString()}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <Link to={`/leads/${lead.id}`} style={{ fontSize: '0.8125rem', fontWeight: 600 }}>Details</Link>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-        {/* Upcoming Appointments */}
-        <div className="card" style={{ padding: '1.5rem 0' }}>
-          <div className="section-header" style={{ padding: '0 1.5rem', marginBottom: '1.5rem' }}>
-            <h3 style={{ margin: 0, fontSize: '1.125rem' }}>Upcoming Appointments</h3>
-            <Link to="/appointments" style={{ fontSize: '0.875rem', fontWeight: 600 }}>Full Schedule &rarr;</Link>
-          </div>
+            {/* Upcoming Appointments */}
+            <div className="card" style={{ padding: '1.5rem 0' }}>
+              <div className="section-header" style={{ padding: '0 1.5rem', marginBottom: '1.5rem' }}>
+                <h3 style={{ margin: 0, fontSize: '1.125rem' }}>Upcoming Appointments</h3>
+                <Link to="/appointments" style={{ fontSize: '0.875rem', fontWeight: 600 }}>Full Schedule &rarr;</Link>
+              </div>
 
-          <div className="table-container" style={{ border: 'none', borderRadius: 0 }}>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Patient</th>
-                  <th>Time</th>
-                  <th>Source</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {upcomingAppts.length === 0 ? (
-                  <tr><td colSpan={4} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-light)' }}>No upcoming appointments.</td></tr>
-                ) : (
-                  upcomingAppts.map(appt => (
-                    <tr key={appt.id}>
-                      <td style={{ fontWeight: 600 }}>
-                        {appt.leads ? `${appt.leads.first_name} ${appt.leads.last_name}` : 'N/A'}
-                      </td>
-                      <td style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
-                        {formatTime(appt.start_time)}
-                      </td>
-                      <td>
-                        <span style={{ fontSize: '0.75rem', textTransform: 'capitalize' }}>{appt.source.replace('_', ' ')}</span>
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <Link to={`/leads/${appt.lead_id}`} style={{ fontSize: '0.8125rem', fontWeight: 600 }}>Lead</Link>
-                      </td>
+              <div className="table-container" style={{ border: 'none', borderRadius: 0 }}>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Patient</th>
+                      <th>Time</th>
+                      <th>Source</th>
+                      <th></th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {upcomingAppts.length === 0 ? (
+                      <tr><td colSpan={4} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-light)' }}>No upcoming appointments.</td></tr>
+                    ) : (
+                      upcomingAppts.map(appt => (
+                        <tr key={appt.id}>
+                          <td style={{ fontWeight: 600 }}>
+                            {appt.leads ? `${appt.leads.first_name} ${appt.leads.last_name}` : 'N/A'}
+                          </td>
+                          <td style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
+                            {formatTime(appt.start_time)}
+                          </td>
+                          <td>
+                            <span style={{ fontSize: '0.75rem', textTransform: 'capitalize' }}>{appt.source.replace('_', ' ')}</span>
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <Link to={`/leads/${appt.lead_id}`} style={{ fontSize: '0.8125rem', fontWeight: 600 }}>Lead</Link>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }
-

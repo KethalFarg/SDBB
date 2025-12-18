@@ -1,0 +1,19 @@
+# ======================
+# Environment files
+# ======================
+.env
+.env.local
+.env.*.local
+
+# ======================
+# Supabase local state
+# ======================
+supabase/.env.local
+supabase/functions/.env
+supabase/.branches/
+
+# ======================
+# OS junk
+# ======================
+.DS_Store
+Thumbs.db

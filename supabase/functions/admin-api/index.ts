@@ -19,7 +19,250 @@ serve(async (req) => {
   const path = url.pathname
 
   try {
-    // SECURITY: Enforce Admin Auth
+    // 1. Initialize Service Role Client
+    // We use service role here because admin and public booking routes 
+    // need cross-practice access and access to protected tables.
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+    // 2. ROUTING & SECURITY
+    // Public routes starting with /public/ bypass admin auth
+    if (path.includes('/public/')) {
+      // 2a. PUBLIC ROUTE: POST /public/appointments/create
+      // Protected by shared secret, not admin auth
+      if (req.method === 'POST' && path.endsWith('/public/appointments/create')) {
+        const websiteBookingKey = Deno.env.get('WEBSITE_BOOKING_KEY');
+        if (!websiteBookingKey) {
+          return new Response(JSON.stringify({ error: 'Server not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const clientKey = req.headers.get('x-sd-website-key');
+        if (!clientKey || clientKey !== websiteBookingKey) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const { practice_id, lead_id, start_at, end_at, notes } = await req.json();
+
+        if (!practice_id || !lead_id || !start_at || !end_at) {
+          return new Response(JSON.stringify({ error: 'Missing required fields' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const { data, error } = await supabase.rpc('admin_create_appointment', {
+          p_practice_id: practice_id,
+          p_lead_id: lead_id,
+          p_start_time: start_at,
+          p_end_time: end_at,
+          p_source: 'website',
+          p_created_by: 'website'
+        });
+
+        if (error) {
+          // Check for slot unavailable (P0001 is Postgres RAISE EXCEPTION)
+          if (error.code === 'P0001' && error.message?.includes('Time slot unavailable')) {
+            return new Response(JSON.stringify({ 
+              error: 'time_slot_unavailable',
+              message: 'Time slot unavailable'
+            }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+
+          // Check for slot outside availability
+          if (error.code === 'P0001' && error.message?.includes('Time slot outside availability')) {
+            return new Response(JSON.stringify({ 
+              error: 'outside_availability',
+              message: 'Time slot outside availability'
+            }), { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+
+          return new Response(JSON.stringify({ 
+            error: error.message,
+            details: error
+          }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        return new Response(JSON.stringify({ appointment: data }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // 2b. PUBLIC ROUTE: GET /public/availability
+      if (req.method === 'GET' && path.endsWith('/public/availability')) {
+        const websiteBookingKey = Deno.env.get('WEBSITE_BOOKING_KEY');
+        if (!websiteBookingKey) {
+          return new Response(JSON.stringify({ error: 'Server not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const clientKey = req.headers.get('x-sd-website-key');
+        if (!clientKey || clientKey !== websiteBookingKey) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const practiceId = url.searchParams.get('practice_id');
+        if (!practiceId) {
+          return new Response(JSON.stringify({ error: 'practice_id is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const { data, error } = await supabase
+          .from('availability_blocks')
+          .select('id, day_of_week, start_time, end_time, type')
+          .eq('practice_id', practiceId)
+          .order('day_of_week', { ascending: true })
+          .order('start_time', { ascending: true });
+
+        if (error) {
+          return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        return new Response(JSON.stringify({ 
+          practice_id: practiceId,
+          availability: data 
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // 2c. PUBLIC ROUTE: POST /public/appointments/hold
+      if (req.method === 'POST' && path.endsWith('/public/appointments/hold')) {
+        const websiteBookingKey = Deno.env.get('WEBSITE_BOOKING_KEY');
+        if (!websiteBookingKey) {
+          return new Response(JSON.stringify({ error: 'Server not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const clientKey = req.headers.get('x-sd-website-key');
+        if (!clientKey || clientKey !== websiteBookingKey) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const { practice_id, lead_id, start_at, end_at, hold_minutes } = await req.json();
+
+        if (!practice_id || !lead_id || !start_at || !end_at) {
+          return new Response(JSON.stringify({ error: 'Missing required fields' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const { data, error } = await supabase.rpc('admin_create_appointment_hold', {
+          p_practice_id: practice_id,
+          p_lead_id: lead_id,
+          p_start_time: start_at,
+          p_end_time: end_at,
+          p_source: 'website',
+          p_created_by: 'website',
+          p_hold_minutes: hold_minutes ?? 10
+        });
+
+        if (error) {
+          if (error.code === 'P0001') {
+            if (error.message?.includes('Time slot unavailable (overlap)')) {
+              return new Response(JSON.stringify({ error: 'time_slot_unavailable', message: 'Time slot unavailable' }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+            }
+            if (error.message?.includes('Time slot outside availability')) {
+              return new Response(JSON.stringify({ error: 'outside_availability', message: 'Time slot outside availability' }), { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+            }
+          }
+          return new Response(JSON.stringify({ error: error.message, details: error }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        return new Response(JSON.stringify({ hold: data }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // 2d. PUBLIC ROUTE: POST /public/appointments/confirm
+      if (req.method === 'POST' && path.endsWith('/public/appointments/confirm')) {
+        const websiteBookingKey = Deno.env.get('WEBSITE_BOOKING_KEY');
+        if (!websiteBookingKey) {
+          return new Response(JSON.stringify({ error: 'Server not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const clientKey = req.headers.get('x-sd-website-key');
+        if (!clientKey || clientKey !== websiteBookingKey) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const { appointment_id } = await req.json();
+
+        if (!appointment_id) {
+          return new Response(JSON.stringify({ error: 'appointment_id is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const { data, error } = await supabase.rpc('admin_confirm_appointment_hold', {
+          p_appointment_id: appointment_id
+        });
+
+        if (error) {
+          if (error.code === 'P0001') {
+            if (error.message?.includes('Hold not found')) {
+              return new Response(JSON.stringify({ error: 'hold_not_found', message: 'Hold not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+            }
+            if (error.message?.includes('Hold expired')) {
+              return new Response(JSON.stringify({ error: 'hold_expired', message: 'Hold expired' }), { status: 410, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+            }
+            if (error.message?.includes('Appointment is not a hold')) {
+              return new Response(JSON.stringify({ error: 'not_a_hold', message: 'Appointment is not a hold' }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+            }
+            if (error.message?.includes('Time slot unavailable (overlap)')) {
+              return new Response(JSON.stringify({ error: 'time_slot_unavailable', message: 'Time slot unavailable' }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+            }
+          }
+          return new Response(JSON.stringify({ error: error.message, details: error }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        return new Response(JSON.stringify({ appointment: data }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // 2e. PUBLIC ROUTE: GET /public/slots
+      if (req.method === 'GET' && path.endsWith('/public/slots')) {
+        const websiteBookingKey = Deno.env.get('WEBSITE_BOOKING_KEY');
+        if (!websiteBookingKey) {
+          return new Response(JSON.stringify({ error: 'Server not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const clientKey = req.headers.get('x-sd-website-key');
+        if (!clientKey || clientKey !== websiteBookingKey) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const zip = url.searchParams.get('zip');
+        const date = url.searchParams.get('date');
+        const slotMinutesStr = url.searchParams.get('slot_minutes');
+        const slotMinutes = slotMinutesStr ? parseInt(slotMinutesStr, 10) : 30;
+
+        if (!zip || !date) {
+          return new Response(JSON.stringify({ 
+            error: "missing_required_fields", 
+            message: "zip and date are required" 
+          }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        if (isNaN(slotMinutes) || slotMinutes <= 0) {
+          return new Response(JSON.stringify({ 
+            error: "invalid_slot_minutes", 
+            message: "slot_minutes must be a positive integer" 
+          }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const { data, error } = await supabase.rpc('public_get_slots_by_zip', { 
+          p_zip: zip, 
+          p_date: date, 
+          p_slot_minutes: slotMinutes 
+        });
+
+        if (error) {
+          if (error.code === 'P0001' && error.message?.includes('No practice available for ZIP')) {
+            return new Response(JSON.stringify({ 
+              error: "no_practice_for_zip", 
+              message: "No practice available for ZIP" 
+            }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+          }
+          return new Response(JSON.stringify({ error: error.message, details: error }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        return new Response(JSON.stringify({ 
+          zip, 
+          date, 
+          slot_minutes: slotMinutes, 
+          slots: data 
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // If it's a /public/ path but no route matched
+      return new Response(JSON.stringify({ error: 'Public route not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // 3. SECURITY: Enforce Admin Auth for all other routes
     // This throws if unauthorized (401) or forbidden (403)
     let adminUserId: string;
     try {
@@ -28,12 +271,6 @@ serve(async (req) => {
       const status = err.message.startsWith('Forbidden') ? 403 : 401;
       return new Response(JSON.stringify({ error: err.message }), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
-
-    // Initialize Service Role Client for Admin Operations
-    // We use service role here because admins need cross-practice access and access to protected tables
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     // GET /admin/practices
     if (req.method === 'GET' && path.endsWith('/admin/practices')) {
@@ -520,6 +757,33 @@ serve(async (req) => {
       });
 
       return new Response(JSON.stringify({ data: inserted }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 201 });
+    }
+
+    // POST /admin/appointments/create
+    if (req.method === 'POST' && path.endsWith('/admin/appointments/create')) {
+      const { practice_id, lead_id, start_at, end_at, source, notes } = await req.json();
+
+      if (!practice_id || !lead_id || !start_at || !end_at || !source) {
+        return new Response(JSON.stringify({ error: 'Missing required fields' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const { data, error } = await supabase.rpc('admin_create_appointment', {
+        p_practice_id: practice_id,
+        p_lead_id: lead_id,
+        p_start_time: start_at,
+        p_end_time: end_at,
+        p_source: source,
+        p_created_by: adminUserId ?? 'admin'
+      });
+
+      if (error) {
+        return new Response(JSON.stringify({ 
+          error: error.message,
+          details: error
+        }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      return new Response(JSON.stringify({ appointment: data }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // GET /designation_review
