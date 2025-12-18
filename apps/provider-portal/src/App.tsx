@@ -1,12 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Availability } from './pages/Availability';
 import { Leads } from './pages/Leads';
+import { Assessments } from './pages/Assessments';
+import { Sales } from './pages/Sales';
 import { LeadDetail } from './pages/LeadDetail';
 import { Appointments } from './pages/Appointments';
+import { Settings } from './pages/Settings';
 import { supabase } from './supabaseClient';
 import { useSession } from './hooks/useSession';
 
@@ -17,7 +20,7 @@ function Layout({ children }: { children: React.ReactNode }) {
   const [loadingPractice, setLoadingPractice] = useState(false);
 
   useEffect(() => {
-    if (!session?.user?.id) return;
+    if (!session?.user) return;
 
     async function fetchPractice() {
       setLoadingPractice(true);
@@ -25,7 +28,7 @@ function Layout({ children }: { children: React.ReactNode }) {
         const { data, error } = await supabase
           .from('practice_users')
           .select('practices(name)')
-          .eq('user_id', session.user.id)
+          .eq('user_id', session!.user.id)
           .limit(1);
 
         if (error) throw error;
@@ -45,41 +48,52 @@ function Layout({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
   };
 
-  const isActive = (path: string) => location.pathname.startsWith(path);
+  const isActive = (path: string) => location.pathname === path || (path !== '/' && location.pathname.startsWith(path));
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-header">
-          <h1 className="brand-title">Spinal</h1>
-          <span className="brand-subtitle">Provider Portal</span>
+          <img 
+            src="https://imagedelivery.net/ye6TBwd9tSy8dGYL2VHjgg/fdd5f772-73a3-4208-fd11-f03e2a90eb00/public" 
+            alt="Spinal Decompression" 
+            className="brand-logo"
+          />
         </div>
         
         <nav className="nav-menu">
-          <Link 
-            to="/dashboard" 
-            className={`nav-link ${isActive('/dashboard') ? 'active' : ''}`}
-          >
+          <Link to="/dashboard" className={`nav-link ${isActive('/dashboard') ? 'active' : ''}`}>
             Dashboard
           </Link>
-          <Link 
-            to="/leads" 
-            className={`nav-link ${isActive('/leads') ? 'active' : ''}`}
-          >
-            Leads
-          </Link>
-          <Link 
-            to="/appointments" 
-            className={`nav-link ${isActive('/appointments') ? 'active' : ''}`}
-          >
-            Appointments
-          </Link>
-          <Link 
-            to="/availability" 
-            className={`nav-link ${isActive('/availability') ? 'active' : ''}`}
-          >
-            Availability
-          </Link>
+          
+          <div className="nav-group">
+            <span className="nav-group-title">Patients</span>
+            <Link to="/leads" className={`nav-link ${isActive('/leads') ? 'active' : ''}`}>
+              Leads
+              <span className="nav-helper">Initial inquiries</span>
+            </Link>
+            <Link to="/assessments" className={`nav-link ${isActive('/assessments') ? 'active' : ''}`}>
+              Assessments
+              <span className="nav-helper">Quiz completed</span>
+            </Link>
+            <Link to="/appointments" className={`nav-link ${isActive('/appointments') ? 'active' : ''}`}>
+              Appointments
+              <span className="nav-helper">Scheduled sessions</span>
+            </Link>
+          </div>
+
+          <div className="nav-group">
+            <span className="nav-group-title">Practice</span>
+            <Link to="/availability" className={`nav-link ${isActive('/availability') ? 'active' : ''}`}>
+              Availability
+            </Link>
+            <Link to="/sales" className={`nav-link ${isActive('/sales') ? 'active' : ''}`}>
+              Sales & Outcomes
+            </Link>
+            <Link to="/settings" className={`nav-link ${isActive('/settings') ? 'active' : ''}`}>
+              Settings
+            </Link>
+          </div>
         </nav>
 
         <div className="sidebar-footer">
@@ -115,59 +129,17 @@ export default function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Dashboard />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/leads"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Leads />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/leads/:id"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <LeadDetail />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/appointments"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Appointments />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/availability"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Availability />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/" element={<Navigate to="/dashboard" />} />
+        <Route path="/dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
+        <Route path="/leads" element={<ProtectedRoute><Layout><Leads /></Layout></ProtectedRoute>} />
+        <Route path="/leads/:id" element={<ProtectedRoute><Layout><LeadDetail /></Layout></ProtectedRoute>} />
+        <Route path="/assessments" element={<ProtectedRoute><Layout><Assessments /></Layout></ProtectedRoute>} />
+        <Route path="/appointments" element={<ProtectedRoute><Layout><Appointments /></Layout></ProtectedRoute>} />
+        <Route path="/availability" element={<ProtectedRoute><Layout><Availability /></Layout></ProtectedRoute>} />
+        <Route path="/sales" element={<ProtectedRoute><Layout><Sales /></Layout></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/dashboard" />} />
       </Routes>
     </Router>
   );
 }
-

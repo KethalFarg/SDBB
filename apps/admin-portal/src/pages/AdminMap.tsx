@@ -39,14 +39,14 @@ export function AdminMap() {
 
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data }: { data: { session: any } }) => {
       if (!mounted) return;
-      setSession(session);
-      console.log("[ADMIN_PORTAL] session user:", session?.user?.id, session?.user?.email);
-      if (!session) navigate('/login');
+      setSession(data.session);
+      console.log("[ADMIN_PORTAL] session user:", data.session?.user?.id, data.session?.user?.email);
+      if (!data.session) navigate('/login');
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession: any) => {
       if (!mounted) return;
       setSession(newSession);
       console.log("[ADMIN_PORTAL] auth change user:", newSession?.user?.id, newSession?.user?.email);
@@ -264,20 +264,19 @@ export function AdminMap() {
       <div style={{ display: 'flex', flex: 1 }}>
         <div style={{ width: '350px', borderRight: '1px solid #ddd', padding: '1rem', overflowY: 'auto' }}>
           <h3>Practices</h3>
-          <div style={{ marginBottom: '0.5rem' }}>
-            <button onClick={() => navigate('/admin/designation-review')} style={{ marginRight: '0.5rem' }}>
-              Designation Review
-            </button>
-            <button onClick={() => navigate('/admin/leads')}>
-              Leads
-            </button>
-          </div>
-          <button onClick={() => supabase.auth.signOut().then(() => navigate('/login'))}>Logout</button>
           <div style={{ margin: '1rem 0' }}>
             <label>
               <input type="checkbox" checked={includeMissing} onChange={e => setIncludeMissing(e.target.checked)} />
               Include Missing Coords
             </label>
+          </div>
+          <div style={{ marginBottom: '1rem' }}>
+            <button 
+              onClick={() => navigate('/admin/onboarding')}
+              style={{ width: '100%', padding: '0.5rem', background: '#0c4c54', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+            >
+              + New Practice
+            </button>
           </div>
           {practices.map(p => (
             <div 

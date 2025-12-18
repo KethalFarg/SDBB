@@ -5,15 +5,18 @@ import { AdminMap } from './pages/AdminMap';
 import { DesignationReview } from './pages/DesignationReview';
 import { LeadDetail } from './pages/LeadDetail';
 import { LeadsList } from './pages/LeadsList';
+import { PracticeOnboarding } from './pages/PracticeOnboarding';
+import { PracticeAccess } from './pages/PracticeAccess';
 import { supabase } from './lib/supabase';
+import { AdminLayout } from './components/AdminLayout';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    supabase.auth.getSession().then(({ data }: { data: { session: any } }) => {
+      setSession(data.session);
       setLoading(false);
     });
 
@@ -24,9 +27,9 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading session...</div>;
   if (!session) return <Navigate to="/login" />;
-  return <>{children}</>;
+  return <AdminLayout>{children}</AdminLayout>;
 }
 
 export default function App() {
@@ -44,6 +47,21 @@ export default function App() {
             <LeadsList />
           </PrivateRoute>
         } />
+        <Route path="/admin/onboarding" element={
+          <PrivateRoute>
+            <PracticeOnboarding />
+          </PrivateRoute>
+        } />
+        <Route path="/admin/onboarding/:id" element={
+          <PrivateRoute>
+            <PracticeOnboarding />
+          </PrivateRoute>
+        } />
+        <Route path="/admin/onboarding/:id/access" element={
+          <PrivateRoute>
+            <PracticeAccess />
+          </PrivateRoute>
+        } />
         <Route path="/admin/designation-review" element={
           <PrivateRoute>
             <DesignationReview />
@@ -59,4 +77,3 @@ export default function App() {
     </Router>
   );
 }
-

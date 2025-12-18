@@ -6,7 +6,7 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 console.log("[ADMIN_PORTAL] VITE_SUPABASE_URL =", supabaseUrl);
 console.log("[ADMIN_PORTAL] anon key present =", !!supabaseAnonKey);
 
-let supabase: ReturnType<typeof createClient> | null = null;
+let supabase: ReturnType<typeof createClient>;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Missing Supabase environment variables; using no-op client for UI preview only');
@@ -19,7 +19,14 @@ if (!supabaseUrl || !supabaseAnonKey) {
     },
   } as unknown as ReturnType<typeof createClient>;
 } else {
-  supabase = createClient(supabaseUrl, supabaseAnonKey);
+  supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storageKey: "sd_admin_portal_auth",
+    },
+  });
 }
 
 export { supabase };

@@ -1,8 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useSession } from '../hooks/useSession';
 import { usePracticeId } from '../hooks/usePracticeId';
+import { PageShell } from '../components/PageShell';
+import { EmptyState } from '../components/EmptyState';
+import { LoadingState } from '../components/LoadingState';
+import { ErrorState } from '../components/ErrorState';
+import { DataTable } from '../components/DataTable';
+import { StatusPill } from '../components/StatusPill';
 
 type Lead = {
   id: string;
@@ -14,6 +20,7 @@ type Lead = {
   zip: string | null;
   routing_outcome: string | null;
   practice_id: string | null;
+  assessments?: { id: string }[];
 };
 
 export function Leads() {
@@ -33,14 +40,26 @@ export function Leads() {
     setLoading(true);
     setError(null);
     try {
+      // Fetching leads and checking for assessments in one go
       const { data, error: fetchError } = await supabase
         .from('leads')
-        .select('id, created_at, first_name, last_name, email, phone, zip, routing_outcome, practice_id')
+        .select(`
+          id, 
+          created_at, 
+          first_name, 
+          last_name, 
+          email, 
+          phone, 
+          zip, 
+          routing_outcome, 
+          practice_id,
+          assessments(id)
+        `)
         .eq('practice_id', practiceId)
         .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
-      setLeads(data || []);
+      setLeads((data as any) || []);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -62,100 +81,70 @@ export function Leads() {
     });
   }, [q, leads]);
 
-  const statusFor = (lead: Lead) => {
-    if (lead.practice_id) return <span className="status-pill status-assigned">Assigned</span>;
-    if (lead.routing_outcome === 'designation') return <span className="status-pill status-review">Needs Review</span>;
-    if (lead.routing_outcome === 'no_provider_in_radius') return <span className="status-pill status-no-coverage">No Coverage</span>;
-    return <span className="status-pill status-new">New</span>;
-  };
-
-  if (!session) return <div className="main-content">Loading session...</div>;
-  if (loadingPractice) return <div className="main-content">Verifying practice...</div>;
+  if (!session) return <LoadingState />;
+  if (loadingPractice || loading) return <LoadingState />;
+  if (error || practiceError) return <ErrorState message={error || practiceError || ''} retry={fetchLeads} />;
 
   if (!practiceId) {
     return (
-      <div className="main-content">
-        <div className="card" style={{ color: '#92400e', backgroundColor: '#fffbeb', border: '1px solid #fef3c7' }}>
-          Your account isn’t linked to a practice yet. Please contact support.
-        </div>
-      </div>
+      <PageShell title="Leads">
+        <EmptyState 
+          title="No Practice Assigned" 
+          description="No practice assigned to this account. Contact support." 
+        />
+      </PageShell>
     );
   }
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-        <h2>Leads</h2>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <button 
-            onClick={fetchLeads} 
-            className="btn btn-outline btn-sm"
-            disabled={loading}
-          >
-            Refresh
-          </button>
+    <PageShell 
+      title="Leads" 
+      subtitle="Patients who have expressed interest in spinal decompression"
+      actions={
+        <div style={{ display: 'flex', gap: '1rem' }}>
           <input
             type="text"
-            className="input-search"
+            className="input-search input-sm"
             placeholder="Search leads..."
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
+          <button onClick={fetchLeads} className="btn btn-outline btn-sm">Refresh</button>
         </div>
-      </div>
-
-      {(error || practiceError) && (
-        <div className="card" style={{ color: '#991b1b', backgroundColor: '#fef2f2', border: '1px solid #fee2e2' }}>
-          {error || practiceError}
-        </div>
-      )}
-      
-      {loading && <div style={{ textAlign: 'center', padding: '3rem' }}>Loading leads...</div>}
-      
-      {!loading && !error && filtered.length === 0 && (
-        <div className="card" style={{ textAlign: 'center', padding: '3rem', color: 'var(--color-text-muted)' }}>
-          {leads.length === 0 ? 'No leads found for your practice.' : 'No leads found matching your search.'}
-        </div>
-      )}
-
-      {!loading && !error && filtered.length > 0 && (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div className="table-container">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Created</th>
-                  <th>Name</th>
-                  <th>Phone</th>
-                  <th>Email</th>
-                  <th>ZIP</th>
-                  <th>Status</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((lead) => (
-                  <tr key={lead.id}>
-                    <td>{new Date(lead.created_at).toLocaleDateString()}</td>
-                    <td style={{ fontWeight: 600 }}>
-                      {(lead.first_name || lead.last_name) ? `${lead.first_name ?? ''} ${lead.last_name ?? ''}`.trim() : 'N/A'}
-                    </td>
-                    <td>{lead.phone ?? 'N/A'}</td>
-                    <td>{lead.email ?? 'N/A'}</td>
-                    <td>{lead.zip ?? 'N/A'}</td>
-                    <td>{statusFor(lead)}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      <Link to={`/leads/${lead.id}`} className="btn btn-outline btn-sm">
-                        View Details
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
+      }
+    >
+      <DataTable 
+        headers={['Created', 'Name', 'Phone', 'Email', 'Status', '']} 
+        empty={filtered.length === 0}
+        onEmpty={
+          <EmptyState 
+            title={leads.length === 0 ? "No leads yet" : "No results"} 
+            description={leads.length === 0 ? "Leads assigned to your practice will appear here." : "Try a different search term."} 
+          />
+        }
+      >
+        {filtered.map((lead) => (
+          <tr key={lead.id}>
+            <td>{new Date(lead.created_at).toLocaleDateString()}</td>
+            <td style={{ fontWeight: 600 }}>
+              {(lead.first_name || lead.last_name) ? `${lead.first_name ?? ''} ${lead.last_name ?? ''}`.trim() : 'N/A'}
+            </td>
+            <td>{lead.phone ?? 'N/A'}</td>
+            <td>{lead.email ?? 'N/A'}</td>
+            <td><StatusPill status={lead.practice_id ? 'assigned' : (lead.routing_outcome || 'new')} /></td>
+            <td style={{ textAlign: 'right' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                {lead.assessments && lead.assessments.length > 0 && (
+                  <button className="btn btn-primary btn-sm" title="View Assessment Report">Report</button>
+                )}
+                <Link to={`/leads/${lead.id}`} className="btn btn-outline btn-sm">
+                  View
+                </Link>
+              </div>
+            </td>
+          </tr>
+        ))}
+      </DataTable>
+    </PageShell>
   );
 }

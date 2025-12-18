@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Link } from 'react-router-dom';
 
@@ -27,11 +27,12 @@ export function DesignationReview() {
 
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data }: { data: { session: any } }) => {
       if (!mounted) return;
-      setSession(session);
+      setSession(data.session);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_evt, newSession) => {
+      if (!mounted) return;
       setSession(newSession);
       if (!newSession) {
         setReviews([]);
@@ -105,8 +106,8 @@ export function DesignationReview() {
   }
 
   return (
-    <div style={{ padding: '1rem' }}>
-      <h2>Designation Review</h2>
+    <div style={{ padding: '2rem' }}>
+      <h2 style={{ marginBottom: '2rem' }}>Designation Review</h2>
       {error && <div style={{ color: 'red', marginBottom: '0.5rem' }}>{error}</div>}
       {loading && <div>Loading...</div>}
       {(!loading && reviews.length === 0) && <div>No items to review.</div>}

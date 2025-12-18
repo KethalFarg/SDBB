@@ -21,7 +21,7 @@ export function usePracticeId() {
         const { data, error: userError } = await supabase
           .from('practice_users')
           .select('practice_id')
-          .eq('user_id', session.user.id)
+          .eq('user_id', session!.user.id)
           .limit(1);
 
         if (userError) throw userError;

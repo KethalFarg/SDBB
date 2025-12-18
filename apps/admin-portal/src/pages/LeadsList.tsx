@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
 const API_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-api`;
@@ -22,16 +22,14 @@ export function LeadsList() {
   const [leads, setLeads] = useState<LeadListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [offset, setOffset] = useState(0);
-  const navigate = useNavigate();
 
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data }: { data: { session: any } }) => {
       if (!mounted) return;
-      setSession(session);
+      setSession(data.session);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_evt, newSession) => {
       setSession(newSession);
@@ -53,7 +51,6 @@ export function LeadsList() {
   const fetchLeads = async (activeSession: any, query: string, start: number) => {
     setLoading(true);
     setError(null);
-    setMessage(null);
     try {
       const params = new URLSearchParams();
       params.set('limit', String(PAGE_SIZE));
@@ -92,7 +89,6 @@ export function LeadsList() {
     if (!confirmed) return;
     setLoading(true);
     setError(null);
-    setMessage(null);
     try {
       const res = await fetch(`${API_BASE}/admin/leads/cleanup-test`, {
         method: 'POST',
@@ -103,7 +99,7 @@ export function LeadsList() {
         throw new Error(txt || `Failed cleanup (${res.status})`);
       }
       const json = await res.json();
-      setMessage(`Deleted ${json.deleted_count ?? 0} test leads`);
+      alert(`Deleted ${json.deleted_count ?? 0} test leads`);
       // refresh list
       fetchLeads(session, q, offset);
     } catch (err: any) {
@@ -116,11 +112,13 @@ export function LeadsList() {
   if (!session) return <div>Loading session...</div>;
 
   return (
-    <div style={{ padding: '1rem' }}>
-      <h2>Leads</h2>
-      <div style={{ marginBottom: '0.5rem' }}>
-        <button onClick={() => navigate('/admin/map')} style={{ marginRight: '0.5rem' }}>Back to Map</button>
-        <button onClick={cleanupTestLeads} style={{ marginRight: '0.5rem' }}>
+    <div style={{ padding: '2rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+        <h2 style={{ margin: 0 }}>Leads</h2>
+        <button 
+          onClick={cleanupTestLeads}
+          style={{ padding: '0.5rem 1rem', background: '#fef2f2', color: '#991b1b', border: '1px solid #fee2e2', borderRadius: '4px', cursor: 'pointer' }}
+        >
           Delete Test Leads (ZIP 99999)
         </button>
       </div>

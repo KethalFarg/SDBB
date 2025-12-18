@@ -12,10 +12,10 @@ export function Login() {
     e.preventDefault();
     setError(null);
     
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error } = await (supabase.auth.signInWithPassword({
       email,
       password,
-    });
+    }) as Promise<any>);
 
     if (error) {
       setError(error.message);

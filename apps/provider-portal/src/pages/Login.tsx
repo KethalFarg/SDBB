@@ -32,19 +32,22 @@ export function Login() {
     <div className="login-container">
       <div className="login-card">
         <div className="login-header">
-          <h1 className="brand-title" style={{ fontSize: '2rem', color: 'var(--color-primary)' }}>Spinal</h1>
-          <span className="brand-subtitle" style={{ fontSize: '0.875rem' }}>Provider Access</span>
+          <img 
+            src="https://imagedelivery.net/ye6TBwd9tSy8dGYL2VHjgg/fdd5f772-73a3-4208-fd11-f03e2a90eb00/public" 
+            alt="Spinal Decompression" 
+          />
+          <span className="brand-subtitle">Provider Access</span>
         </div>
 
         <form onSubmit={onSubmit}>
           {envMissing && (
-            <div className="card" style={{ color: '#991b1b', backgroundColor: '#fef2f2', border: '1px solid #fee2e2', padding: '1rem', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+            <div style={{ color: '#991b1b', backgroundColor: '#fef2f2', border: '1px solid #fee2e2', padding: '1rem', fontSize: '0.8125rem', marginBottom: '1.5rem', borderRadius: '4px' }}>
               ⚠️ Missing Configuration. Please contact system administrator.
             </div>
           )}
           
           {error && (
-            <div className="card" style={{ color: '#991b1b', backgroundColor: '#fef2f2', border: '1px solid #fee2e2', padding: '1rem', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+            <div style={{ color: '#991b1b', backgroundColor: '#fef2f2', border: '1px solid #fee2e2', padding: '1rem', fontSize: '0.8125rem', marginBottom: '1.5rem', borderRadius: '4px' }}>
               {error}
             </div>
           )}
@@ -75,19 +78,17 @@ export function Login() {
 
           <button 
             type="submit" 
-            className="btn btn-primary btn-lg" 
+            className="btn btn-primary" 
             disabled={loading} 
-            style={{ width: '100%', marginTop: '1rem', padding: '0.875rem' }}
+            style={{ width: '100%', marginTop: '0.5rem', padding: '0.875rem' }}
           >
             {loading ? 'Authenticating...' : 'Sign In'}
           </button>
         </form>
         
-        <div style={{ marginTop: '2rem', textAlign: 'center' }}>
-          <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-            &copy; {new Date().getFullYear()} SpinalDecompression.com<br/>
-            Secure Provider Portal
-          </p>
+        <div className="login-footer">
+          &copy; {new Date().getFullYear()} SpinalDecompression.com
+          <span className="login-footer-link">Secure Provider Portal</span>
         </div>
       </div>
     </div>

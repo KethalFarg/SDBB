@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
 const API_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-api`;
@@ -7,7 +7,6 @@ const PRACTICES_ENDPOINT = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ad
 
 export function LeadDetail() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const [session, setSession] = useState<any>(null);
   const [lead, setLead] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -21,9 +20,9 @@ export function LeadDetail() {
 
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data }: { data: { session: any } }) => {
       if (!mounted) return;
-      setSession(session);
+      setSession(data.session);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_evt, newSession) => {
       if (!mounted) return;
@@ -152,11 +151,8 @@ export function LeadDetail() {
   if (!lead) return <div>No lead found.</div>;
 
   return (
-    <div style={{ padding: '1rem' }}>
-      <h2>Lead Detail</h2>
-      <div style={{ marginBottom: '1rem' }}>
-        <button onClick={() => navigate(-1)}>Back</button>
-      </div>
+    <div style={{ padding: '2rem' }}>
+      <h2 style={{ marginBottom: '2rem' }}>Lead Detail</h2>
       <div><strong>ID:</strong> {lead.id}</div>
       <div><strong>Created:</strong> {lead.created_at}</div>
       <div><strong>Name:</strong> {lead.first_name} {lead.last_name}</div>

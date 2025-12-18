@@ -10,6 +10,64 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+async function linkUserToPractice(supabase: any, adminUserId: string, user_id: string, practice_id: string, role?: string) {
+  if (!user_id || !practice_id) {
+    return new Response(JSON.stringify({ error: 'user_id and practice_id are required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  // Check if already exists
+  const { data: existing, error: checkError } = await supabase
+    .from('practice_users')
+    .select('*')
+    .eq('user_id', user_id)
+    .maybeSingle();
+
+  if (checkError) throw checkError;
+
+  if (existing) {
+    if (existing.practice_id === practice_id) {
+      return new Response(JSON.stringify({ message: 'User already linked to this practice', data: existing }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    } else {
+      return new Response(JSON.stringify({ error: 'User is already linked to a different practice' }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+  }
+
+  // Validate practice exists
+  const { data: practice, error: practiceError } = await supabase
+    .from('practices')
+    .select('id')
+    .eq('id', practice_id)
+    .single();
+
+  if (practiceError || !practice) {
+    return new Response(JSON.stringify({ error: 'Practice not found' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  // Insert
+  const { data: inserted, error: insertError } = await supabase
+    .from('practice_users')
+    .insert({
+      user_id,
+      practice_id,
+      role: role || 'practice_user'
+    })
+    .select()
+    .single();
+
+  if (insertError) throw insertError;
+
+  // Audit log
+  await supabase.from('audit_log').insert({
+    entity_type: 'practice_user',
+    entity_id: user_id,
+    action: 'link_user',
+    performed_by: adminUserId,
+    metadata: { practice_id, role: role || 'practice_user' }
+  });
+
+  return new Response(JSON.stringify({ data: inserted }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 201 });
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -698,65 +756,61 @@ serve(async (req) => {
       return new Response(JSON.stringify({ deleted_count: deletedCount }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // POST /admin/users/link-practice
+    // POST /admin/users/link-practice (Existing, keeping for compat)
     if (req.method === 'POST' && path.endsWith('/admin/users/link-practice')) {
       const { user_id, practice_id, role } = await req.json();
+      return await linkUserToPractice(supabase, adminUserId, user_id, practice_id, role);
+    }
 
-      if (!user_id || !practice_id) {
-        return new Response(JSON.stringify({ error: 'user_id and practice_id are required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      // Check if already exists
-      const { data: existing, error: checkError } = await supabase
+    // GET /admin/practices/:id/users
+    const practiceUsersMatch = path.match(/\/admin\/practices\/([^\/]+)\/users$/);
+    if (req.method === 'GET' && practiceUsersMatch) {
+      const practiceId = practiceUsersMatch[1];
+      
+      const { data: practiceUsers, error: puError } = await supabase
         .from('practice_users')
         .select('*')
-        .eq('user_id', user_id)
-        .maybeSingle();
+        .eq('practice_id', practiceId);
 
-      if (checkError) throw checkError;
+      if (puError) throw puError;
 
-      if (existing) {
-        if (existing.practice_id === practice_id) {
-          return new Response(JSON.stringify({ message: 'User already linked to this practice', data: existing }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        } else {
-          return new Response(JSON.stringify({ error: 'User is already linked to a different practice' }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      // Fetch emails from auth.users (requires service role / admin client)
+      const usersWithEmails = await Promise.all((practiceUsers || []).map(async (pu: any) => {
+        const { data: { user }, error: authError } = await supabase.auth.admin.getUserById(pu.user_id);
+        return {
+          ...pu,
+          email: user?.email || 'unknown'
+        };
+      }));
+
+      return new Response(JSON.stringify({ data: usersWithEmails }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // POST /admin/practices/:id/users
+    if (req.method === 'POST' && practiceUsersMatch) {
+      const practiceId = practiceUsersMatch[1];
+      const { email, user_id, role } = await req.json();
+
+      let targetUserId = user_id;
+
+      if (email && !targetUserId) {
+        // Resolve email to user_id
+        // NOTE: listUsers() is the only way via admin JS client to find by email without a specific filter API
+        const { data: { users }, error: listError } = await supabase.auth.admin.listUsers();
+        if (listError) throw listError;
+        
+        const found = users.find(u => u.email?.toLowerCase() === email.toLowerCase());
+        if (!found) {
+          return new Response(JSON.stringify({ error: 'User not found. Please create the auth user first.' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
+        targetUserId = found.id;
       }
 
-      // Validate practice exists
-      const { data: practice, error: practiceError } = await supabase
-        .from('practices')
-        .select('id')
-        .eq('id', practice_id)
-        .single();
-
-      if (practiceError || !practice) {
-        return new Response(JSON.stringify({ error: 'Practice not found' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      if (!targetUserId) {
+        return new Response(JSON.stringify({ error: 'user_id or email is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      // Insert
-      const { data: inserted, error: insertError } = await supabase
-        .from('practice_users')
-        .insert({
-          user_id,
-          practice_id,
-          role: role || 'practice_user'
-        })
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-
-      // Audit log
-      await supabase.from('audit_log').insert({
-        entity_type: 'practice_user',
-        entity_id: user_id,
-        action: 'link_user',
-        performed_by: adminUserId,
-        metadata: { practice_id, role: role || 'practice_user' }
-      });
-
-      return new Response(JSON.stringify({ data: inserted }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 201 });
+      return await linkUserToPractice(supabase, adminUserId, targetUserId, practiceId, role);
     }
 
     // POST /admin/appointments/create
