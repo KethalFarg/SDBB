@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Login } from './pages/Login';
@@ -12,37 +11,13 @@ import { Appointments } from './pages/Appointments';
 import { Settings } from './pages/Settings';
 import { supabase } from './supabaseClient';
 import { useSession } from './hooks/useSession';
+import { usePracticeId } from './hooks/usePracticeId';
+import { PracticeGate } from './components/PracticeGate';
 
 function Layout({ children }: { children: React.ReactNode }) {
   const { session } = useSession();
   const location = useLocation();
-  const [practiceName, setPracticeName] = useState<string | null>(null);
-  const [loadingPractice, setLoadingPractice] = useState(false);
-
-  useEffect(() => {
-    if (!session?.user) return;
-
-    async function fetchPractice() {
-      setLoadingPractice(true);
-      try {
-        const { data, error } = await supabase
-          .from('practice_users')
-          .select('practices(name)')
-          .eq('user_id', session!.user.id)
-          .limit(1);
-
-        if (error) throw error;
-        const name = (data?.[0]?.practices as any)?.name;
-        setPracticeName(name || null);
-      } catch (err) {
-        console.error('Error fetching sidebar practice info:', err);
-      } finally {
-        setLoadingPractice(false);
-      }
-    }
-
-    fetchPractice();
-  }, [session]);
+  const { practice, loading: loadingPractice, error: practiceError } = usePracticeId();
 
   const logout = async () => {
     await supabase.auth.signOut();
@@ -103,8 +78,8 @@ function Layout({ children }: { children: React.ReactNode }) {
                 <span className="user-email">{session.user.email}</span>
                 {loadingPractice ? (
                   <span className="user-practice" style={{ opacity: 0.5 }}>Loading...</span>
-                ) : practiceName ? (
-                  <span className="user-practice">Practice: {practiceName}</span>
+                ) : practice?.name ? (
+                  <span className="user-practice">Practice: {practice.name}</span>
                 ) : (
                   <span className="no-practice-pill">No practice linked</span>
                 )}
@@ -118,7 +93,9 @@ function Layout({ children }: { children: React.ReactNode }) {
       </aside>
 
       <main className="main-content">
-        {children}
+        <PracticeGate practice={practice} loading={loadingPractice} error={practiceError}>
+          {children}
+        </PracticeGate>
       </main>
     </div>
   );
