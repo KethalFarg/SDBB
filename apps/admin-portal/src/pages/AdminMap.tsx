@@ -162,6 +162,11 @@ export function AdminMap() {
     e.preventDefault();
     if (!session || !selectedId) return;
 
+    if (overlaps.length > 0) {
+      const confirmed = window.confirm(`There are ${overlaps.length} practice overlaps. Overlapping practices may cause leads to be sent to manual designation review. Do you want to proceed?`);
+      if (!confirmed) return;
+    }
+
     await fetch(`${API_BASE}/admin/practices/${selectedId}`, {
       method: 'PATCH',
       headers: { 

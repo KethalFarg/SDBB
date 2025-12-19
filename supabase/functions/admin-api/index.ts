@@ -541,70 +541,36 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: 'practice_id is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      // Validate lead exists
-      const { data: lead, error: leadError } = await supabase
-        .from('leads')
-        .select('id, practice_id, routing_outcome, designation_reason')
-        .eq('id', leadId)
-        .single();
+      const { data: updatedLead, error: rpcError } = await supabase.rpc('admin_reassign_lead', {
+        p_lead_id: leadId,
+        p_practice_id: practice_id,
+        p_admin_user_id: adminUserId
+      }).single();
 
-      if (leadError || !lead) {
+      if (rpcError) {
+        return new Response(JSON.stringify({ error: rpcError.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      if (!updatedLead) {
         return new Response(JSON.stringify({ error: 'Lead not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      // Validate practice exists
-      const { data: practice, error: practiceError } = await supabase
-        .from('practices')
-        .select('id, name')
-        .eq('id', practice_id)
-        .single();
-
-      if (practiceError || !practice) {
-        return new Response(JSON.stringify({ error: 'Practice not found' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      const fromPracticeId = lead.practice_id;
-
-      // Update lead
-      const { data: updatedLead, error: updateLeadError } = await supabase
+      // Re-fetch with join for consistency with detail view
+      const { data: leadWithPractice } = await supabase
         .from('leads')
-        .update({
-          practice_id,
-          routing_outcome: 'assigned'
-        })
+        .select('*, practices(name)')
         .eq('id', leadId)
-        .select('id, created_at, first_name, last_name, email, phone, zip, source, practice_id, routing_outcome, designation_reason, routing_snapshot, practices(name)')
         .single();
-
-      if (updateLeadError || !updatedLead) {
-        return new Response(JSON.stringify({ error: 'Failed to update lead' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      // Audit log
-      const { error: auditError } = await supabase
-        .from('audit_log')
-        .insert({
-          entity_type: 'lead',
-          entity_id: leadId,
-          action: 'reassign_practice',
-          performed_by: adminUserId,
-          metadata: {
-            from_practice_id: fromPracticeId,
-            to_practice_id: practice_id
-          }
-        });
-
-      if (auditError) console.error('Audit log failed', auditError);
 
       const ENABLE_GHL_SYNC = (Deno.env.get('ENABLE_GHL_SYNC') ?? 'false').toLowerCase() === 'true';
       const ghl_sync_status = ENABLE_GHL_SYNC ? 'enabled_stub' : 'disabled';
-      const ghl_would_sync = !!updatedLead.practice_id;
-      const lead_status = updatedLead.practice_id ? 'Assigned' :
-        updatedLead.routing_outcome === 'designation' ? 'Needs Review' :
-        ((updatedLead.routing_outcome === 'no_provider_in_radius' || updatedLead.designation_reason === 'zip_not_found') ? 'No Coverage' : 'New');
-      const practice_name = (updatedLead as any).practices?.name ?? null;
+      const ghl_would_sync = !!leadWithPractice.practice_id;
+      const lead_status = leadWithPractice.practice_id ? 'Assigned' :
+        leadWithPractice.routing_outcome === 'designation' ? 'Needs Review' :
+        ((leadWithPractice.routing_outcome === 'no_provider_in_radius' || leadWithPractice.designation_reason === 'zip_not_found') ? 'No Coverage' : 'New');
+      const practice_name = (leadWithPractice as any).practices?.name ?? null;
 
-      const response = { ...updatedLead, practice_name, ghl_sync_status, ghl_would_sync, lead_status };
+      const response = { ...leadWithPractice, practice_name, ghl_sync_status, ghl_would_sync, lead_status };
 
       return new Response(JSON.stringify({ data: response }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
@@ -614,73 +580,18 @@ serve(async (req) => {
     if (req.method === 'POST' && unassignMatch) {
       const leadId = unassignMatch[1];
 
-      // Load lead
-      const { data: lead, error: leadError } = await supabase
-        .from('leads')
-        .select('id, practice_id, routing_outcome, designation_reason, routing_snapshot')
-        .eq('id', leadId)
-        .single();
+      const { data: updatedLead, error: rpcError } = await supabase.rpc('admin_unassign_lead', {
+        p_lead_id: leadId,
+        p_admin_user_id: adminUserId
+      }).single();
 
-      if (leadError || !lead) {
+      if (rpcError) {
+        return new Response(JSON.stringify({ error: rpcError.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      if (!updatedLead) {
         return new Response(JSON.stringify({ error: 'Lead not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
-
-      const fromPracticeId = lead.practice_id;
-
-      // Update lead: clear practice, set routing_outcome to designation, mark reason
-      const newRoutingSnapshot = {
-        ...(lead.routing_snapshot || {}),
-        manual_reason: 'manual_unassigned'
-      };
-
-      const { data: updatedLead, error: updateLeadError } = await supabase
-        .from('leads')
-        .update({
-          practice_id: null,
-          routing_outcome: 'designation',
-          designation_reason: 'manual_unassigned',
-          routing_snapshot: newRoutingSnapshot
-        })
-        .eq('id', leadId)
-        .select('id, created_at, first_name, last_name, email, phone, zip, source, practice_id, routing_outcome, designation_reason, routing_snapshot, practices(name)')
-        .single();
-
-      if (updateLeadError || !updatedLead) {
-        return new Response(JSON.stringify({ error: 'Failed to unassign lead' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      // Ensure designation_review exists (if none open)
-      const { data: existingReview, error: reviewCheckError } = await supabase
-        .from('designation_review')
-        .select('id, resolved_at')
-        .eq('lead_id', leadId)
-        .is('resolved_at', null)
-        .maybeSingle();
-
-      if (!reviewCheckError && !existingReview) {
-        // create a new review item
-        await supabase.from('designation_review').insert({
-          lead_id: leadId,
-          reason_code: 'manual_unassigned',
-          notes: 'Manually unassigned by admin'
-        });
-      }
-
-      // Audit log
-      const { error: auditError } = await supabase
-        .from('audit_log')
-        .insert({
-          entity_type: 'lead',
-          entity_id: leadId,
-          action: 'unassign_practice',
-          performed_by: adminUserId,
-          metadata: {
-            from_practice_id: fromPracticeId,
-            to_practice_id: null
-          }
-        });
-
-      if (auditError) console.error('Audit log failed', auditError);
 
       const ENABLE_GHL_SYNC = (Deno.env.get('ENABLE_GHL_SYNC') ?? 'false').toLowerCase() === 'true';
       const ghl_sync_status = ENABLE_GHL_SYNC ? 'enabled_stub' : 'disabled';
@@ -688,7 +599,7 @@ serve(async (req) => {
       const lead_status = updatedLead.practice_id ? 'Assigned' :
         updatedLead.routing_outcome === 'designation' ? 'Needs Review' :
         ((updatedLead.routing_outcome === 'no_provider_in_radius' || updatedLead.designation_reason === 'zip_not_found') ? 'No Coverage' : 'New');
-      const practice_name = (updatedLead as any).practices?.name ?? null;
+      const practice_name = null;
 
       const response = { ...updatedLead, practice_name, ghl_sync_status, ghl_would_sync, lead_status };
 
@@ -794,23 +705,40 @@ serve(async (req) => {
       let targetUserId = user_id;
 
       if (email && !targetUserId) {
-        // Resolve email to user_id
-        // NOTE: listUsers() is the only way via admin JS client to find by email without a specific filter API
+        const normalizedEmail = email.trim().toLowerCase();
+        
+        // 1. Resolve email to user_id if already exists
         const { data: { users }, error: listError } = await supabase.auth.admin.listUsers();
         if (listError) throw listError;
         
-        const found = users.find(u => u.email?.toLowerCase() === email.toLowerCase());
-        if (!found) {
-          return new Response(JSON.stringify({ error: 'User not found. Please create the auth user first.' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const found = users.find(u => u.email?.toLowerCase() === normalizedEmail);
+        
+        if (found) {
+          targetUserId = found.id;
+        } else {
+          // 2. Invite/Create new user
+          // inviteUserByEmail is preferred as it sends the link
+          const { data: inviteData, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(normalizedEmail);
+          
+          if (inviteError) {
+            // Fallback to createUser if invite fails or is restricted
+            const { data: createData, error: createError } = await supabase.auth.admin.createUser({
+              email: normalizedEmail,
+              email_confirm: true
+            });
+            if (createError) throw createError;
+            targetUserId = createData.user?.id;
+          } else {
+            targetUserId = inviteData.user?.id;
+          }
         }
-        targetUserId = found.id;
       }
 
       if (!targetUserId) {
-        return new Response(JSON.stringify({ error: 'user_id or email is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ error: 'Failed to resolve or create user for this email' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      return await linkUserToPractice(supabase, adminUserId, targetUserId, practiceId, role);
+      return await linkUserToPractice(supabase, adminUserId, targetUserId, practiceId, role || 'practice_user');
     }
 
     // POST /admin/appointments/create
@@ -881,97 +809,47 @@ serve(async (req) => {
     const assignMatch = path.match(/\/designation_review\/([^\/]+)\/assign$/);
     if (req.method === 'POST' && assignMatch) {
        const reviewId = assignMatch[1];
-       const { assigned_practice_id, notes } = await req.json() as AssignDesignationRequest;
+       const { assigned_practice_id } = await req.json() as AssignDesignationRequest;
 
        if (!assigned_practice_id) {
          return new Response(JSON.stringify({ error: 'assigned_practice_id is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
        }
 
-       // 1. Validate Review State
-       const { data: review, error: reviewError } = await supabase
+       const { error: rpcError } = await supabase.rpc('admin_assign_designation_review', {
+         p_review_id: reviewId,
+         p_assigned_practice_id: assigned_practice_id,
+         p_admin_user_id: adminUserId
+       });
+
+       if (rpcError) {
+         return new Response(JSON.stringify({ error: rpcError.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+       }
+
+       // Fetch updated lead for GHL stub
+       const { data: review } = await supabase
          .from('designation_review')
-         .select('id, lead_id, resolved_at')
+         .select('lead_id')
          .eq('id', reviewId)
          .single();
 
-       if (reviewError || !review) {
-         return new Response(JSON.stringify({ error: 'Review item not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-       }
-
-       if (review.resolved_at) {
-         return new Response(JSON.stringify({ error: 'Review already resolved' }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-       }
-
-       // 2. Validate Practice State
-       const { data: practice, error: practiceError } = await supabase
-         .from('practices')
-         .select('id, status')
-         .eq('id', assigned_practice_id)
-         .single();
-
-       if (practiceError || !practice) {
-          return new Response(JSON.stringify({ error: 'Practice not found' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-       }
-
-       if (practice.status !== 'active') {
-          return new Response(JSON.stringify({ error: 'Practice is not active' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-       }
-
-       const now = new Date().toISOString();
-
-       // 3. Perform Updates
-       // Update designation_review
-       const { data: updatedReview, error: updateReviewError } = await supabase
-         .from('designation_review')
-         .update({
-           assigned_practice_id,
-           notes: notes ? `${review.notes || ''}\n${notes}` : review.notes, // Append notes logic
-           resolved_by: adminUserId,
-           resolved_at: now
-         })
-         .eq('id', reviewId)
-         .select()
-         .single();
-        
-       if (updateReviewError) throw updateReviewError;
-
-       // Update Lead
-       const { data: updatedLead, error: updateLeadError } = await supabase
-         .from('leads')
-         .update({
-           practice_id: assigned_practice_id,
-           routing_outcome: 'assigned'
-         })
-         .eq('id', review.lead_id)
-         .select()
-         .single();
-
-       if (updateLeadError) {
-         console.error('Failed to update lead', updateLeadError);
-         throw updateLeadError;
-       }
-
-       // 4. Audit Log
-       const { error: auditError } = await supabase
-         .from('audit_log')
-         .insert({
-           entity_type: 'designation_review',
-           entity_id: reviewId,
-           action: 'manual_assignment',
-           performed_by: adminUserId,
-           metadata: {
-             before: { resolved_at: null },
-             after: { resolved_at: now, assigned_practice_id },
-             notes: 'Manual assignment via Admin API'
-           }
-         });
+       if (review) {
+         const { data: updatedLead } = await supabase
+           .from('leads')
+           .select('*')
+           .eq('id', review.lead_id)
+           .single();
          
-       if (auditError) console.error('Audit log failed', auditError);
+         if (updatedLead) {
+           await maybeSyncLeadToGHL({ 
+             id: updatedLead.id, 
+             practice_id: updatedLead.practice_id, 
+             routing_outcome: updatedLead.routing_outcome, 
+             designation_reason: updatedLead.designation_reason 
+           }, 'designation_assignment');
+         }
+       }
 
-       // GHL Stub: Log or stub-sync
-       await maybeSyncLeadToGHL({ id: updatedLead.id, practice_id: updatedLead.practice_id, routing_outcome: updatedLead.routing_outcome, designation_reason: updatedLead.designation_reason }, 'designation_assignment');
-
-       return new Response(JSON.stringify({ success: true, review: updatedReview, lead: updatedLead }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+       return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     return new Response('Not Found', { status: 404, headers: corsHeaders })
