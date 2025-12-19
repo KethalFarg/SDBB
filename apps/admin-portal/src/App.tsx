@@ -7,6 +7,7 @@ import { LeadDetail } from './pages/LeadDetail';
 import { LeadsList } from './pages/LeadsList';
 import { PracticeOnboarding } from './pages/PracticeOnboarding';
 import { PracticeAccess } from './pages/PracticeAccess';
+import { BookingCenter } from './pages/BookingCenter';
 import { supabase } from './lib/supabase';
 import { AdminLayout } from './components/AdminLayout';
 
@@ -70,6 +71,11 @@ export default function App() {
         <Route path="/admin/leads/:id" element={
           <PrivateRoute>
             <LeadDetail />
+          </PrivateRoute>
+        } />
+        <Route path="/admin/bookings" element={
+          <PrivateRoute>
+            <BookingCenter />
           </PrivateRoute>
         } />
         <Route path="*" element={<Navigate to="/admin/map" />} />
