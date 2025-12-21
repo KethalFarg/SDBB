@@ -27,7 +27,7 @@ begin
       and ab.day_of_week = v_day_of_week
       and ab.type = 'available'
       and p_start_time::time >= ab.start_time
-      and p_end_time::time <= ab.end_time
+      and p_end_time::time < ab.end_time
   )
   into v_has_availability;
 

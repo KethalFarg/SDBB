@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, envMissing } from '../supabaseClient';
 import { useSession } from '../hooks/useSession';
@@ -11,9 +11,11 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  if (session) {
-    navigate('/dashboard');
-  }
+  useEffect(() => {
+    if (session) {
+      navigate('/dashboard');
+    }
+  }, [session, navigate]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

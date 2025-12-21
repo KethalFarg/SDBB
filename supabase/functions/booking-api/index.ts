@@ -8,6 +8,17 @@ import {
 } from "../_shared/api-types.ts"
 import { triggerGhlSync } from "../_shared/ghl-trigger.ts"
 
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY for booking-api');
+}
+
+const supabaseAdmin = (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY)
+  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
+  : null;
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -22,7 +33,7 @@ serve(async (req) => {
   const path = url.pathname
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const supabaseUrl = 'http://kong:8000'
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
 
     // Helper to get auth client
@@ -51,8 +62,47 @@ serve(async (req) => {
       return { practiceId: data.practice_id, userId: user.user.id };
     }
 
+    // --- Timezone Helpers ---
+    const getPracticeTimezone = async (client: any, practiceId: string): Promise<string> => {
+      const { data } = await client.from('practices').select('timezone').eq('id', practiceId).single();
+      return data?.timezone || 'America/New_York';
+    };
+
+    const localMidnightUtc = (dateStr: string, tz: string): Date => {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      let utcDate = new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        year: 'numeric', month: 'numeric', day: 'numeric',
+        hour: 'numeric', minute: 'numeric', second: 'numeric',
+        hour12: false
+      });
+      const getLocalInstant = (d: Date) => {
+        const parts = formatter.formatToParts(d);
+        const p: any = {};
+        parts.forEach(part => p[part.type] = part.value);
+        const h = parseInt(p.hour) % 24;
+        return new Date(Date.UTC(parseInt(p.year), parseInt(p.month) - 1, parseInt(p.day), h, parseInt(p.minute), parseInt(p.second)));
+      };
+      for (let i = 0; i < 2; i++) {
+        const local = getLocalInstant(utcDate);
+        const diff = utcDate.getTime() - local.getTime();
+        utcDate = new Date(utcDate.getTime() + diff);
+      }
+      return utcDate;
+    };
+
+    const dayOfWeekInTz = (dateStr: string, tz: string): number => {
+      // Use noon to avoid any midnight boundary issues with weekday names
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const noon = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+      const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: tz }).format(noon);
+      return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].indexOf(weekday);
+    };
+
     // GET /appointments (Portal - User Auth)
-    if (req.method === 'GET' && path.endsWith('/appointments')) {
+    if (req.method === 'GET' && (path === '/appointments' || path.endsWith('/booking-api/appointments'))) {
+       console.log('[booking-api] portal /appointments handler', path)
        let supabase;
        try { supabase = getAuthClient(req); } catch(e) { return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }); }
 
@@ -152,24 +202,173 @@ serve(async (req) => {
       return new Response(JSON.stringify(appointment), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 201 });
     }
 
-    // GET /practices/:id/availability
-    if (req.method === 'GET' && path.match(/\/practices\/[^\/]+\/availability$/)) {
-      const practiceId = path.split('/')[2];
-      // TODO: Logic
-      return new Response(JSON.stringify({ practice_id: practiceId, slots: [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    // GET /practices/:id/availability?date=YYYY-MM-DD
+    const availabilityMatch = path.match(/\/practices\/([^\/]+)\/availability$/);
+    if (req.method === 'GET' && availabilityMatch) {
+      let supabase;
+      try { supabase = getAuthClient(req); } catch(e) { return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }); }
+
+      const practiceId = availabilityMatch[1];
+      const date = url.searchParams.get('date');
+
+      if (!date) {
+        return new Response(JSON.stringify({ error: 'Missing date parameter' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      try {
+        if (!supabaseAdmin) {
+          return new Response(JSON.stringify({ error: 'Server not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const timezone = await getPracticeTimezone(supabase, practiceId);
+        const dayOfWeek = dayOfWeekInTz(date, timezone);
+
+        const [blocksRes, exceptionsRes] = await Promise.all([
+          supabaseAdmin.from('availability_blocks').select('*').eq('practice_id', practiceId).eq('day_of_week', dayOfWeek).order('start_time'),
+          supabase.from('availability_exceptions').select('*').eq('practice_id', practiceId).eq('exception_date', date).order('start_time', { nullsFirst: true })
+        ]);
+
+        if (blocksRes.error) throw blocksRes.error;
+        if (exceptionsRes.error) throw exceptionsRes.error;
+
+        return new Response(JSON.stringify({
+          data: {
+            practice_id: practiceId,
+            date,
+            timezone,
+            day_of_week: dayOfWeek,
+            blocks: blocksRes.data,
+            exceptions: exceptionsRes.data
+          }
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
+    // GET /practices/:id/appointments?date=YYYY-MM-DD
+    const appointmentsMatch = path.match(/\/practices\/([^\/]+)\/appointments$/);
+    if (req.method === 'GET' && appointmentsMatch) {
+      console.log('[booking-api] practice appointments handler', path)
+      let supabase;
+      try { supabase = getAuthClient(req); } catch(e) { return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }); }
+
+      const practiceId = appointmentsMatch[1];
+      const date = url.searchParams.get('date');
+
+      if (!date) {
+        return new Response(JSON.stringify({ error: 'Missing date parameter' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      try {
+        if (!supabaseAdmin) {
+          throw new Error('Server not configured (admin client missing)');
+        }
+
+        const timezone = await getPracticeTimezone(supabase, practiceId);
+        
+        // Use the new robust RPC for timezone-aware date filtering
+        const { data, error } = await supabaseAdmin.rpc('admin_get_appointments_for_date', {
+          p_practice_id: practiceId,
+          p_date: date,
+          p_tz: timezone
+        });
+
+        if (error) throw error;
+
+        console.info(`booking-api appointments fetch | practice=${practiceId} date=${date} tz=${timezone} count=${data?.length ?? 0}`);
+
+        return new Response(JSON.stringify({
+          data: {
+            practice_id: practiceId,
+            date,
+            timezone,
+            appointments: data
+          }
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
+    // POST /practices/:id/appointments/confirm
+    const confirmMatch = path.match(/\/practices\/([^\/]+)\/appointments\/confirm$/);
+    if (req.method === 'POST' && confirmMatch) {
+      let supabase;
+      try { supabase = getAuthClient(req); } catch(e) { return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }); }
+
+      const practiceId = confirmMatch[1];
+      const body = await req.json();
+      const { lead_id, start_time, end_time, source } = body;
+
+      if (!lead_id || !start_time || !end_time) {
+        return new Response(JSON.stringify({ error: 'Missing required fields: lead_id, start_time, end_time' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      if (new Date(start_time) >= new Date(end_time)) {
+        return new Response(JSON.stringify({ error: 'start_time must be before end_time' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      try {
+        // Enforce no overlap
+        const { data: overlaps, error: overlapError } = await supabase
+          .from('appointments')
+          .select('id')
+          .eq('practice_id', practiceId)
+          .neq('status', 'canceled')
+          .lt('start_time', end_time)
+          .gt('end_time', start_time);
+
+        if (overlapError) throw overlapError;
+        if (overlaps && overlaps.length > 0) {
+          return new Response(JSON.stringify({ error: 'Slot already booked' }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const { data, error } = await supabase
+          .from('appointments')
+          .insert({
+            practice_id: practiceId,
+            lead_id,
+            start_time,
+            end_time,
+            status: 'scheduled',
+            source: source || 'call_center',
+            created_by: 'admin_portal'
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        // Trigger GHL Sync
+        await triggerGhlSync('appointment', data.id);
+
+        return new Response(JSON.stringify({ data }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
     }
 
     // GET /availability_blocks
     if (req.method === 'GET' && path.endsWith('/availability_blocks')) {
+      if (!supabaseAdmin) {
+        return new Response(JSON.stringify({ error: 'Server not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
       let supabase;
       try { supabase = getAuthClient(req); } catch(e) { return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }); }
 
       const day = url.searchParams.get('day_of_week');
       const type = url.searchParams.get('type');
       
-      let query = supabase.from('availability_blocks').select('*');
+      let query = supabaseAdmin.from('availability_blocks').select('*');
       
-      if (day) query = query.eq('day_of_week', day);
+      if (day !== null) {
+        const dayInt = Number.parseInt(day, 10);
+        if (!Number.isNaN(dayInt)) {
+          query = query.eq('day_of_week', dayInt);
+        }
+      }
       if (type) query = query.eq('type', type);
 
       const { data, error } = await query;
@@ -194,9 +393,13 @@ serve(async (req) => {
       }
 
       try {
+        if (!supabaseAdmin) {
+          return new Response(JSON.stringify({ error: 'Server not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
         const { practiceId } = await getMyPracticeId(supabase);
 
-        const { data: overlaps, error: overlapError } = await supabase
+        const { data: overlaps, error: overlapError } = await supabaseAdmin
           .from('availability_blocks')
           .select('id')
           .eq('practice_id', practiceId)
@@ -325,18 +528,6 @@ serve(async (req) => {
        await triggerGhlSync('appointment', appointmentId);
 
        return new Response(JSON.stringify({ success: true, appointment: updatedAppt }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-    }
-
-    // POST /appointments/hold
-    if (req.method === 'POST' && path.endsWith('/appointments/hold')) {
-      const payload = await req.json() as HoldAppointmentRequest;
-      return new Response(JSON.stringify({ hold_id: 'stub', status: 'held' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-    }
-
-    // POST /appointments/confirm
-    if (req.method === 'POST' && path.endsWith('/appointments/confirm')) {
-      const payload = await req.json() as ConfirmAppointmentRequest;
-      return new Response(JSON.stringify({ status: 'scheduled', id: 'new-id' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
     return new Response('Not Found', { status: 404, headers: corsHeaders })

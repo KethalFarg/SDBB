@@ -13,3 +13,12 @@
 # ======================
 supabase/.branches/
 supabase/.temp/
+
+# Admin portal local supabase artifacts (never commit)
+apps/admin-portal/supabase/
+
+# Provider portal build artifacts (never commit)
+apps/provider-portal/node_modules/
+apps/provider-portal/node_modules/.vite/
+apps/provider-portal/node_modules/.vite/deps/
+apps/provider-portal/node_modules/.vite/deps/_metadata.json

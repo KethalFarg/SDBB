@@ -1,19 +1,5 @@
-import React, { useState, useMemo } from 'react';
-
-// Mock Data
-const MOCK_PRACTICES = [
-  { id: '1', name: 'Westside Spinal Center' },
-  { id: '2', name: 'Downtown Wellness' },
-  { id: '3', name: 'North Valley Clinic' },
-];
-
-const MOCK_LEADS = [
-  { id: 'l1', first_name: 'John', last_name: 'Doe', phone: '555-0101', email: 'john@example.com' },
-  { id: 'l2', first_name: 'Jane', last_name: 'Smith', phone: '555-0102', email: 'jane@example.com' },
-  { id: 'l3', first_name: 'Bob', last_name: 'Johnson', phone: '555-0103', email: 'bob@example.com' },
-  { id: 'l4', first_name: 'Alice', last_name: 'Williams', phone: '555-0104', email: 'alice@example.com' },
-  { id: 'l5', first_name: 'Charlie', last_name: 'Brown', phone: '555-0105', email: 'charlie@example.com' },
-];
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { supabase } from '../lib/supabase';
 
 // Helper: 12-hour AM/PM
 const format12h = (minutes: number) => {
@@ -24,42 +10,390 @@ const format12h = (minutes: number) => {
   return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
 };
 
+// Helper: Get day of week (0-6) for a date string in a specific timezone
+const getPracticeDayOfWeek = (dateStr: string, tz: string): number => {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      weekday: 'narrow'
+    }).formatToParts(new Date(dateStr + 'T12:00:00')); // Use noon to avoid day shifts
+    
+    // Fallback if needed, but Intl is reliable. 
+    // Manual mapping for safety:
+    const d = new Date(dateStr + 'T12:00:00');
+    const localD = new Date(d.toLocaleString('en-US', { timeZone: tz }));
+    return localD.getDay();
+  } catch (e) {
+    return new Date(dateStr).getDay();
+  }
+};
+
+// Helper: Convert "HH:MM:SS" or "HH:MM" to minutes
+const timeToMinutes = (timeStr: string): number => {
+  if (!timeStr) return 0;
+  const [h, m] = timeStr.split(':').map(Number);
+  return h * 60 + m;
+};
+
+// Helper: Convert YYYY-MM-DD to a Date object without UTC day-shift
+function dateStrToSafeDate(dateStr: string) {
+  // Use noon local to avoid timezone shifting when parsing YYYY-MM-DD
+  return new Date(`${dateStr}T12:00:00`);
+}
+
+// Helper: Convert minutes since midnight to HH:MM:SS
+function minutesToTimeString(m: number) {
+  const hh = Math.floor(m / 60).toString().padStart(2, '0');
+  const mm = (m % 60).toString().padStart(2, '0');
+  return `${hh}:${mm}:00`;
+}
+
+// Helper: Get timezone offset string (e.g. "+05:00" or "-08:00") for a date and tz
+function getTzOffset(date: Date, tz: string) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    timeZoneName: 'longOffset' // Use longOffset for more predictable "+HH:MM"
+  }).formatToParts(date);
+  const offsetPart = parts.find(p => p.type === 'timeZoneName')?.value || ''; // e.g. "GMT-05:00"
+  
+  const match = offsetPart.match(/[+-]\d{2}:\d{2}/);
+  if (match) return match[0];
+  
+  // Fallback for GMT/UTC
+  if (offsetPart.includes('GMT') || offsetPart.includes('UTC')) {
+    const fallbackMatch = offsetPart.match(/[+-]\d+/);
+    if (!fallbackMatch) return '+00:00';
+    const sign = offsetPart.includes('-') ? '-' : '+';
+    const digits = offsetPart.replace(/[^0-9]/g, '');
+    return `${sign}${digits.padStart(2, '0')}:00`;
+  }
+
+  return '+00:00';
+}
+
+// Helper: Build a Postgres-ready timestamptz string with offset
+function buildTimestampWithOffset(dateStr: string, minutes: number, tz: string) {
+  const timeStr = minutesToTimeString(minutes);
+  // We need the offset for THIS specific wall-clock time in THIS timezone
+  // Simplest way: create a date object and get its offset in that tz
+  const date = new Date(`${dateStr}T${timeStr}`);
+  const offset = getTzOffset(date, tz);
+  return `${dateStr} ${timeStr}${offset}`;
+}
+
+// Helper: Get today's date string in a specific timezone
+function getTodayDateStrInTZ(tz: string) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const y = parts.find(p => p.type === 'year')?.value;
+  const m = parts.find(p => p.type === 'month')?.value;
+  const d = parts.find(p => p.type === 'day')?.value;
+  return `${y}-${m}-${d}`;
+}
+
+// Helper: Check if slot is enabled by availability blocks
+const isSlotEnabled = (slotStart: number, slotEnd: number, blocks: any[]): boolean => {
+  if (!blocks || blocks.length === 0) return false;
+  return blocks.some(b => {
+    const bStart = timeToMinutes(b.start_time);
+    const bEnd = timeToMinutes(b.end_time);
+    return slotStart >= bStart && slotEnd <= bEnd;
+  });
+};
+
+// Helper: Convert ISO timestamp to minute of day in a specific timezone
+const timestampToMinutes = (timestamp: string, tz: string): number => {
+  try {
+    const date = new Date(timestamp);
+    const parts = new Intl.DateTimeFormat('en-US', { 
+      timeZone: tz, 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      hour12: false 
+    }).formatToParts(date);
+    const hh = parseInt(parts.find(p => p.type === 'hour')?.value ?? '0', 10);
+    const mm = parseInt(parts.find(p => p.type === 'minute')?.value ?? '0', 10);
+    return hh * 60 + mm;
+  } catch (e) {
+    console.error('Error converting timestamp to minutes:', e);
+    return 0;
+  }
+};
+
 const START_MIN = 7 * 60; // 7:00 AM
-const END_MIN = 18 * 60; // 6:00 PM
-const STEP = 15;
+const END_MIN = 19 * 60; // 7:00 PM (12 hours)
+const SLOT_STEP = 30; // 30-minute slots ONLY
+
+// --- Sub-components ---
+
+function Toast({ message, onClose }: { message: string; onClose: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div style={{
+      position: 'fixed', bottom: '2rem', right: '2rem',
+      background: '#0c4c54', color: 'white',
+      padding: '1rem 1.5rem', borderRadius: '12px',
+      boxShadow: '0 10px 25px -5px rgba(0,0,0,0.3)',
+      zIndex: 2000, display: 'flex', alignItems: 'center', gap: '0.75rem',
+      animation: 'toastSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+    }}>
+      <div style={{ background: '#00bfa5', width: '22px', height: '22px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>✓</div>
+      <span style={{ fontWeight: 600, fontSize: '0.9375rem' }}>{message}</span>
+      <style>{`
+        @keyframes toastSlideUp {
+          from { transform: translateY(20px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+      `}</style>
+    </div>
+  );
+}
 
 export function BookingCenter() {
-  const [selectedPractice, setSelectedPractice] = useState(MOCK_PRACTICES[0].id);
+  const [adminPractices, setAdminPractices] = useState<Array<{ id: string; name: string; status?: string }>>([]);
+  const [selectedPractice, setSelectedPractice] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [bookedSlots, setBookedSlots] = useState<Record<number, string>>({
-    [9 * 60]: 'Scheduled Patient',
-    [9 * 60 + 15]: 'Scheduled Patient',
-    [14 * 60]: 'Mark Wilson',
-    [14 * 60 + 15]: 'Mark Wilson',
-  });
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [searchTerm, setSearchQuery] = useState('');
   const [duration, setDuration] = useState(30);
+  const [liveLeads, setLiveLeads] = useState<Array<{ id: string; first_name: string | null; last_name: string | null; phone: string | null; email: string | null }>>([]);
+  const [leadsLoading, setLeadsLoading] = useState(false);
+  const [leadsError, setLeadsError] = useState<string | null>(null);
+  const [modalOpenCount, setModalOpenCount] = useState(0);
   
+  // Live API State
+  const [liveAvailability, setLiveAvailability] = useState<any>(null);
+  const [liveAppointments, setLiveAppointments] = useState<any[]>([]);
+  const [apiLoading, setApiLoading] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  // Fetch practice list via admin-api
+  useEffect(() => {
+    const fetchPractices = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('No active session');
+
+        const token = session.access_token;
+        const adminBaseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-api`;
+        const headers = { 'Authorization': `Bearer ${token}` };
+
+        // 1) Try GET /admin/practices
+        let res = await fetch(`${adminBaseUrl}/admin/practices?limit=200&offset=0`, { headers });
+        
+        // 2) Fallback to GET /admin/map/practices
+        if (!res.ok) {
+          res = await fetch(`${adminBaseUrl}/admin/map/practices?include_missing=true`, { headers });
+        }
+
+        if (!res.ok) throw new Error(`Failed to load practices (${res.status})`);
+
+        const json = await res.json();
+        const rawList = Array.isArray(json) ? json : (json.data || []);
+        
+        const normalized = rawList.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          status: p.status
+        }));
+
+        setAdminPractices(normalized);
+        console.log(`Loaded practices count=${normalized.length}`);
+
+        if (normalized.length > 0 && !selectedPractice) {
+          setSelectedPractice(normalized[0].id);
+        }
+      } catch (err: any) {
+        console.error('Error fetching practices via admin-api:', err);
+        setApiError('Failed to load practices list');
+      }
+    };
+    fetchPractices();
+  }, []);
+
+  // Fetch live data
+  const refreshLiveData = useCallback(async () => {
+    if (!selectedPractice) return;
+    setApiLoading(true);
+    setApiError(null);
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('No active session found');
+      }
+
+      const token = session.access_token;
+      const baseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/booking-api`;
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+
+      const [availRes, apptsRes] = await Promise.all([
+        fetch(`${baseUrl}/practices/${selectedPractice}/availability?date=${selectedDate}`, { headers }),
+        fetch(`${baseUrl}/practices/${selectedPractice}/appointments?date=${selectedDate}`, { headers })
+      ]);
+
+      if (!availRes.ok) throw new Error(`Availability fetch failed: ${availRes.statusText}`);
+      if (!apptsRes.ok) throw new Error(`Appointments fetch failed: ${apptsRes.statusText}`);
+
+      const availJson = await availRes.json();
+      const apptsJson = await apptsRes.json();
+
+      setLiveAvailability(availJson.data);
+      setLiveAppointments(apptsJson.data?.appointments || []);
+
+      console.log(`booking-api availability blocks=${availJson.data?.blocks?.length || 0} exceptions=${availJson.data?.exceptions?.length || 0} tz=${availJson.data?.timezone} | appointments total=${apptsJson.data?.appointments?.length || 0}`);
+    } catch (err: any) {
+      console.error('BookingCenter Fetch Error:', err);
+      setApiError(err.message || 'Failed to fetch live data');
+    } finally {
+      setApiLoading(false);
+    }
+  }, [selectedPractice, selectedDate]);
+
+  useEffect(() => {
+    refreshLiveData();
+  }, [refreshLiveData]);
+
+  // Fetch leads when modal opens
+  useEffect(() => {
+    if (!isModalOpen) return;
+
+    let cancelled = false;
+
+    const fetchLeads = async () => {
+      try {
+        setLeadsLoading(true);
+        setLeadsError(null);
+
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        const q = searchTerm ? `&q=${encodeURIComponent(searchTerm)}` : '';
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-api/admin/leads/search?practice_id=${selectedPractice}${q}`;
+        
+        console.log('[BookingCenter] fetching leads from:', url);
+
+        const res = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!res.ok) {
+          const errTxt = await res.text();
+          throw new Error(`Failed to fetch leads: ${res.status} ${errTxt}`);
+        }
+
+        const json = await res.json();
+        const leads = json.data || [];
+
+        console.debug('[BookingCenter] leads search ok', { count: leads.length, q: searchTerm });
+
+        if (cancelled) return;
+
+        setLiveLeads(leads);
+      } catch (e: any) {
+        if (cancelled) return;
+        setLiveLeads([]);
+        setLeadsError(e?.message || 'Failed to load leads');
+      } finally {
+        if (!cancelled) setLeadsLoading(false);
+      }
+    };
+
+    fetchLeads();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isModalOpen, searchTerm, selectedPractice]);
+
+  useEffect(() => {
+    console.log('[BookingCenter] isModalOpen changed:', isModalOpen);
+    if (isModalOpen) setModalOpenCount((c) => c + 1);
+  }, [isModalOpen]);
+
   // Form for new patient
   const [newPatient, setNewPatient] = useState({ first: '', last: '', phone: '', email: '' });
 
   const slots = useMemo(() => {
     const s = [];
-    for (let m = START_MIN; m < END_MIN; m += STEP) {
+    for (let m = START_MIN; m < END_MIN; m += SLOT_STEP) {
       s.push(m);
     }
     return s;
   }, []);
 
-  // Mock slot state logic
-  const getSlotState = (m: number) => {
-    if (bookedSlots[m]) return 'booked';
-    if (m >= 12 * 60 && m < 13 * 60) return 'closed'; // Lunch
+  // Compute timezone-aware availability for the grid
+  const availabilityData = useMemo(() => {
+    const tz = liveAvailability?.timezone || 'America/New_York';
+    const dayOfWeek = getPracticeDayOfWeek(selectedDate, tz);
+    const blocks = liveAvailability?.blocks || [];
+    const dayBlocks = blocks.filter((b: any) => b.day_of_week === dayOfWeek);
     
-    // Mock some static unavailable slots
-    if (m === 10 * 60 || m === 10 * 60 + 15 || m === 15 * 60 + 30) return 'unavailable';
+    return {
+      tz,
+      dayOfWeek,
+      dayBlocks,
+      hasAvailability: dayBlocks.length > 0
+    };
+  }, [liveAvailability, selectedDate]);
+
+  // Derived map of booked slots from liveAppointments
+  const bookedSlotsByMinute = useMemo(() => {
+    const map: Record<number, { name: string; isStart: boolean; isEnd: boolean }> = {};
+    if (!liveAppointments || liveAppointments.length === 0) return map;
+
+    liveAppointments.forEach(appt => {
+      const startIso = appt.start_at || appt.start_time || appt.start;
+      const endIso = appt.end_at || appt.end_time || appt.end;
+      if (!startIso || !endIso) return;
+
+      const rawStartMin = timestampToMinutes(startIso, availabilityData.tz);
+      const rawEndMin = timestampToMinutes(endIso, availabilityData.tz);
+      
+      // Snap to 30-min boundaries
+      const startMin = Math.floor(rawStartMin / SLOT_STEP) * SLOT_STEP;
+      const endMin = Math.ceil(rawEndMin / SLOT_STEP) * SLOT_STEP;
+      
+      if (endMin <= startMin) return;
+
+      const displayName = appt.lead_name || appt.patient_name || appt.name || 'Booked';
+
+      for (let m = startMin; m < endMin; m += SLOT_STEP) {
+        // Only include if it fits in our grid view
+        if (m >= START_MIN && m < END_MIN) {
+          map[m] = { 
+            name: displayName, 
+            isStart: m === startMin,
+            isEnd: (m + SLOT_STEP >= endMin)
+          };
+        }
+      }
+    });
+
+    return map;
+  }, [liveAppointments, availabilityData.tz]);
+
+  const getSlotState = (m: number) => {
+    // 1. Check if it's booked (Overrides everything else)
+    if (bookedSlotsByMinute[m]) return 'booked';
+
+    // 2. Check if it's in availability blocks
+    const enabled = isSlotEnabled(m, m + SLOT_STEP, availabilityData.dayBlocks);
+    if (!enabled) return 'unavailable';
+    
+    // TODO: Apply exceptions (Phase B)
     
     return 'available';
   };
@@ -71,52 +405,99 @@ export function BookingCenter() {
     }
   };
 
-  const handleConfirmBooking = (leadName: string) => {
-    // Book slots based on duration
-    const newBooked = { ...bookedSlots };
-    for (let i = 0; i < duration; i += STEP) {
-      newBooked[selectedSlot! + i] = leadName;
+  const handleConfirmBooking = async (lead: { id: string; name: string }) => {
+    if (selectedSlot === null || !selectedPractice) return;
+
+    setApiLoading(true);
+    setApiError(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('No active session. Please log in again.');
+
+      const tz = liveAvailability?.timezone || 'America/New_York';
+      const startTimestamp = buildTimestampWithOffset(selectedDate, selectedSlot, tz);
+      const endTimestamp = buildTimestampWithOffset(selectedDate, selectedSlot + duration, tz);
+
+      const createdBy = session.user?.id || session.user?.email || 'admin';
+
+      const { data, error } = await supabase.rpc('admin_create_appointment', {
+        p_practice_id: selectedPractice,
+        p_lead_id: lead.id,
+        p_start_time: startTimestamp,
+        p_end_time: endTimestamp,
+        p_source: 'call_center',
+        p_created_by: createdBy
+      });
+
+      if (error) {
+        let msg = error.message || 'Failed to create appointment';
+        if (msg.includes('Time slot outside availability')) msg = 'Time slot outside availability';
+        if (msg.includes('Time slot unavailable (overlap)')) msg = 'Time slot unavailable (overlap)';
+        throw new Error(msg);
+      }
+
+      console.log('Appointment created:', data, { startTimestamp, endTimestamp });
+
+      setIsModalOpen(false);
+      setSelectedSlot(null);
+      setNewPatient({ first: '', last: '', phone: '', email: '' });
+      setSearchQuery('');
+      setToastMessage(`Booking confirmed for ${lead.name}`);
+      
+      // Trigger refresh of live data
+      refreshLiveData();
+    } catch (err: any) {
+      console.error('Booking Error:', err);
+      setApiError(err.message || 'An unexpected error occurred during booking.');
+    } finally {
+      setApiLoading(false);
     }
-    setBookedSlots(newBooked);
-    setIsModalOpen(false);
-    setSelectedSlot(null);
-    setNewPatient({ first: '', last: '', phone: '', email: '' });
-    setSearchQuery('');
-    
-    // TODO: In real integration, call API to create appointment and lead
-    console.info(`Confirmed booking for ${leadName} starting at ${format12h(selectedSlot!)} for ${duration} minutes.`);
   };
 
-  const filteredLeads = MOCK_LEADS.filter(l => 
-    `${l.first_name} ${l.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    l.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    l.phone.includes(searchTerm)
-  );
+  const filteredLeads = useMemo(() => {
+    if (searchTerm === '') return liveLeads.slice(0, 10);
+    const search = searchTerm.toLowerCase();
+    return liveLeads.filter(l => {
+      const displayName = `${l.first_name ?? ''} ${l.last_name ?? ''}`.toLowerCase();
+      const email = (l.email ?? '').toLowerCase();
+      const phone = l.phone ?? '';
+      return displayName.includes(search) || email.includes(search) || phone.includes(search);
+    });
+  }, [liveLeads, searchTerm]);
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto', fontFamily: 'sans-serif' }}>
+    <div style={{ padding: '2rem', maxWidth: '1440px', margin: '0 auto', fontFamily: 'Inter, system-ui, sans-serif' }}>
+      {toastMessage && <Toast message={toastMessage} onClose={() => setToastMessage(null)} />}
+
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2.5rem' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 700, color: '#0c4c54' }}>Booking Center</h1>
-          <p style={{ margin: '0.25rem 0 0 0', color: '#64748b' }}>Book appointments for patients in real time</p>
-          <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#0c4c54', fontWeight: 600, fontSize: '0.875rem' }}>
-            <span style={{ background: '#e0f2f1', padding: '0.25rem 0.75rem', borderRadius: '100px', border: '1px solid #b2dfdb' }}>
+          <h1 style={{ margin: 0, fontSize: '2rem', fontWeight: 800, color: '#0c4c54', letterSpacing: '-0.025em' }}>Booking Center</h1>
+          <p style={{ margin: '0.35rem 0 0 0', color: '#64748b', fontSize: '1.0625rem' }}>Streamlined appointment management for clinical staff</p>
+          <div style={{ marginTop: '1.25rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ background: '#f0fdfa', color: '#0c4c54', padding: '0.4rem 0.875rem', borderRadius: '100px', border: '1px solid #ccfbf1', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Times shown in Eastern Time (ET)
             </span>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', background: '#f8fafc', padding: '0.5rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
           <select 
             value={selectedPractice} 
             onChange={(e) => setSelectedPractice(e.target.value)}
-            style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: 'white', outline: 'none' }}
+            style={{ padding: '0.625rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0', background: 'white', outline: 'none', fontSize: '0.875rem', fontWeight: 600, color: '#1e293b', cursor: 'pointer' }}
           >
-            {MOCK_PRACTICES.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {adminPractices.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
+          <div style={{ width: '1px', height: '24px', background: '#e2e8f0' }} />
           <button 
-            onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
-            style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', fontWeight: 500 }}
+            onClick={() => {
+              const tz = liveAvailability?.timezone || 'America/New_York';
+              setSelectedDate(getTodayDateStrInTZ(tz));
+            }}
+            style={{ padding: '0.625rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem', color: '#475569', transition: 'all 0.2s' }}
+            onMouseOver={(e) => e.currentTarget.style.background = '#f8fafc'}
+            onMouseOut={(e) => e.currentTarget.style.background = 'white'}
           >
             Today
           </button>
@@ -124,100 +505,127 @@ export function BookingCenter() {
             type="date" 
             value={selectedDate} 
             onChange={(e) => setSelectedDate(e.target.value)}
-            style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: '1px solid #e2e8f0', outline: 'none' }}
+            style={{ padding: '0.625rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', fontSize: '0.875rem', fontWeight: 600, color: '#475569', cursor: 'pointer' }}
           />
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '2rem', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '2.5rem', alignItems: 'start' }}>
         {/* Left: Day Calendar */}
-        <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <div style={{ padding: '1.5rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600 }}>Schedule — {new Date(selectedDate).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</h3>
-            <div style={{ display: 'flex', gap: '1.25rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', fontWeight: 500, color: '#64748b' }}>
-                <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#00bfa5' }} /> Available
+        <div style={{ background: 'white', borderRadius: '20px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 20px -2px rgba(0,0,0,0.05)' }}>
+          <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fcfdfe' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#0c4c54', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: '1.125rem' }}>
+                {dateStrToSafeDate(selectedDate).getDate()}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', fontWeight: 500, color: '#64748b' }}>
-                <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#f1f5f9', border: '1px solid #e2e8f0' }} /> Booked
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                  {dateStrToSafeDate(selectedDate).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+                </h3>
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Daily View • {availabilityData.tz}</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', fontWeight: 500, color: '#64748b' }}>
-                <div style={{ 
-                  width: '12px', height: '12px', borderRadius: '3px', background: '#fef2f2', border: '1px solid #fee2e2',
-                  backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(254,226,226,0.5) 3px, rgba(254,226,226,0.5) 6px)' 
-                }} /> Closed
+            </div>
+            
+            <div style={{ display: 'flex', gap: '1.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', fontWeight: 700, color: '#64748b' }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00bfa5' }} /> Available
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', fontWeight: 700, color: '#64748b' }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', border: '1px solid #cbd5e1', background: '#f8fafc' }} /> Unavailable
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', fontWeight: 700, color: '#64748b' }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#cbd5e1' }} /> Booked
               </div>
             </div>
           </div>
+
+          {!availabilityData.hasAvailability && !apiLoading && (
+            <div style={{ padding: '1rem 2rem', background: '#fffbeb', borderBottom: '1px solid #fef3c7', color: '#92400e', fontSize: '0.875rem', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span>⚠️</span>
+              No availability has been set for this practice yet. Add availability in the Provider Portal to enable booking times.
+            </div>
+          )}
           
-          <div style={{ maxHeight: '750px', overflowY: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div style={{ maxHeight: '800px', overflowY: 'auto', scrollBehavior: 'smooth' }}>
+            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
               <tbody>
                 {slots.map(m => {
                   const state = getSlotState(m);
                   const isSelected = selectedSlot === m;
-                  const timeLabel = m % 60 === 0 ? format12h(m) : '';
+                  const isHour = m % 60 === 0;
+                  const isHalfHour = m % 60 !== 0;
+                  const timeLabel = format12h(m);
+                  const isHourBoundaryBelow = (m + SLOT_STEP) % 60 === 0;
+                  const isEnabled = state === 'available' || state === 'booked';
                   
                   return (
-                    <tr key={m} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <tr key={m} style={{ height: '40px' }}>
                       <td style={{ 
-                        width: '100px', padding: '0.75rem 1rem', fontSize: '0.75rem', 
-                        color: m % 60 === 0 ? '#0f172a' : '#94a3b8', 
-                        textAlign: 'right', background: '#f8fafc', fontWeight: m % 60 === 0 ? 700 : 400 
+                        width: '100px', padding: '0 1.5rem', fontSize: '0.75rem', 
+                        color: isHalfHour ? '#94a3b8' : '#0f172a', 
+                        textAlign: 'right', background: '#f8fafc', fontWeight: 800,
+                        borderBottom: isHourBoundaryBelow ? '2px solid #e2e8f0' : '1px solid #f1f5f9',
+                        verticalAlign: 'middle', userSelect: 'none'
                       }}>
-                        {timeLabel || format12h(m).split(':')[1].substring(0, 2)}
+                        {timeLabel}
                       </td>
                       <td 
                         onClick={() => handleSlotClick(m)}
                         title={state === 'available' ? 'Available — Click to book' : undefined}
                         style={{ 
-                          padding: '0.75rem 1.5rem', 
+                          padding: 0, 
                           cursor: state === 'available' ? 'pointer' : 'default',
-                          transition: 'all 0.15s',
-                          background: isSelected ? '#e0f2f1' : state === 'booked' ? '#f8fafc' : state === 'closed' ? '#fffbfc' : 'transparent',
+                          transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
+                          background: isSelected ? '#f0fdfa' : !isEnabled ? '#fcfdfe' : 'transparent',
+                          borderBottom: isHourBoundaryBelow ? '2px solid #e2e8f0' : '1px solid #f1f5f9',
+                          borderLeft: '1px solid #f1f5f9',
                           position: 'relative'
                         }}
-                        onMouseOver={(e) => { if(state === 'available') e.currentTarget.style.background = isSelected ? '#e0f2f1' : '#f0fdfa' }}
-                        onMouseOut={(e) => { if(state === 'available') e.currentTarget.style.background = isSelected ? '#e0f2f1' : 'transparent' }}
+                        onMouseOver={(e) => { if(state === 'available') e.currentTarget.style.background = isSelected ? '#f0fdfa' : '#f8fafc' }}
+                        onMouseOut={(e) => { if(state === 'available') e.currentTarget.style.background = isSelected ? '#f0fdfa' : 'transparent' }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span style={{ fontSize: '0.8125rem', color: isSelected ? '#00796b' : '#94a3b8' }}>
-                            {m % 60 !== 0 ? format12h(m).split(' ')[0] : ''}
-                          </span>
-                          
-                          {state === 'booked' && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', background: '#fff', padding: '3px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-                                {bookedSlots[m]}
-                              </span>
-                            </div>
-                          )}
-                          
-                          {state === 'closed' && (
-                            <span style={{ fontSize: '0.75rem', color: '#b91c1c', fontWeight: 500, background: '#fff', padding: '2px 8px', borderRadius: '4px', border: '1px solid #fee2e2' }}>
-                              Office Closed
-                            </span>
-                          )}
-
-                          {state === 'unavailable' && (
-                            <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic' }}>—</span>
-                          )}
-
-                          {state === 'available' && !isSelected && (
-                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00bfa5', opacity: 0.3 }} />
-                          )}
-                          
-                          {isSelected && (
-                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#00796b' }}>SELECTED</span>
-                          )}
-                        </div>
-                        
-                        {state === 'closed' && (
-                          <div style={{ 
+                        {!isEnabled && (
+                           <div style={{ 
                             position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, 
-                            backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(254,226,226,0.15) 10px, rgba(254,226,226,0.15) 20px)',
+                            backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 12px, rgba(203,213,225,0.05) 12px, rgba(203,213,225,0.05) 24px)',
                             pointerEvents: 'none'
                           }} />
+                        )}
+
+                        {state === 'booked' && (
+                          <div style={{ 
+                            position: 'absolute', top: '2px', left: '6px', right: '6px', bottom: '2px',
+                            background: '#f1f5f9', 
+                            borderRadius: bookedSlotsByMinute[m].isStart ? '8px 8px 0 0' : (bookedSlotsByMinute[m].isEnd ? '0 0 8px 8px' : '0'),
+                            border: '1px solid #e2e8f0', 
+                            borderTop: bookedSlotsByMinute[m].isStart ? '1px solid #e2e8f0' : 'none',
+                            borderBottom: bookedSlotsByMinute[m].isEnd ? '1px solid #e2e8f0' : 'none',
+                            display: 'flex', alignItems: 'center', padding: '0 1.25rem', zIndex: 1,
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.02)', borderLeft: '4px solid #94a3b8'
+                          }}>
+                            {bookedSlotsByMinute[m].isStart && (
+                              <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                                <span style={{ fontSize: '1rem', opacity: 0.6 }}>👤</span> {bookedSlotsByMinute[m].name}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        
+                        {state === 'available' && isSelected && (
+                          <div style={{ 
+                            position: 'absolute', top: '3px', left: '6px', right: '6px', bottom: '3px',
+                            background: '#0c4c54', borderRadius: '8px', border: '1px solid #0c4c54',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5,
+                            boxShadow: '0 0 15px rgba(12,76,84,0.3)', animation: 'pulseGlow 2s infinite'
+                          }}>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 900, color: 'white', letterSpacing: '0.1em' }}>SELECTED SLOT</span>
+                          </div>
+                        )}
+
+                        {state === 'available' && !isSelected && (
+                          <div style={{ height: '100%', width: '100%', display: 'flex', alignItems: 'center', padding: '0 1.25rem' }}>
+                            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#00bfa5', opacity: 0.2 }} />
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -225,65 +633,124 @@ export function BookingCenter() {
                 })}
               </tbody>
             </table>
+            <style>{`
+              @keyframes pulseGlow {
+                0% { opacity: 1; transform: scale(1); }
+                50% { opacity: 0.9; transform: scale(0.995); }
+                100% { opacity: 1; transform: scale(1); }
+              }
+            `}</style>
           </div>
         </div>
 
         {/* Right: Context Panel */}
         <div style={{ position: 'sticky', top: '2rem' }}>
           {!selectedSlot ? (
-            <div style={{ background: 'white', padding: '2.5rem 1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-              <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem' }}>
-                <span style={{ fontSize: '1.75rem' }}>📅</span>
+            <div style={{ background: 'white', padding: '3.5rem 2rem', borderRadius: '20px', border: '1px solid #e2e8f0', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+              <div style={{ width: '72px', height: '72px', borderRadius: '20px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.75rem', border: '1px solid #f1f5f9', fontSize: '2.25rem' }}>
+                📅
               </div>
-              <h4 style={{ margin: 0, fontSize: '1rem', color: '#0f172a', fontWeight: 600 }}>Select a time slot</h4>
-              <p style={{ fontSize: '0.875rem', color: '#64748b', marginTop: '0.75rem', lineHeight: 1.5 }}>Click an available (teal) slot on the calendar to begin booking an appointment.</p>
+              <h4 style={{ margin: 0, fontSize: '1.25rem', color: '#0f172a', fontWeight: 800, letterSpacing: '-0.01em' }}>Ready to book</h4>
+              <p style={{ fontSize: '0.9375rem', color: '#64748b', marginTop: '1rem', lineHeight: 1.6 }}>
+                Select an <span style={{ color: '#00bfa5', fontWeight: 700 }}>Available</span> slot on the grid to start booking an appointment.
+              </p>
             </div>
           ) : (
-            <div style={{ background: 'white', padding: '1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600, color: '#0f172a' }}>Slot Details</h3>
-                <button onClick={() => setSelectedSlot(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '1.5rem', lineHeight: 1 }}>×</button>
+            <div style={{ background: 'white', padding: '2rem', borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.12)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                <h3 style={{ margin: 0, fontSize: '0.8125rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Booking Workflow</h3>
+                <button onClick={() => setSelectedSlot(null)} style={{ background: '#f1f5f9', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1.25rem', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }} onMouseOver={e => e.currentTarget.style.background='#e2e8f0'}>×</button>
               </div>
               
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                <div style={{ padding: '1.25rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
-                  <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em', marginBottom: '0.5rem' }}>APPOINTMENT TIME</div>
-                  <div style={{ fontWeight: 600, color: '#475569', fontSize: '0.875rem' }}>
-                    {new Date(selectedDate).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
+                <div>
+                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 800, letterSpacing: '0.05em', marginBottom: '0.625rem' }}>SELECTED DATE</div>
+                  <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '1.0625rem' }}>
+                    {dateStrToSafeDate(selectedDate).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })}
                   </div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0c4c54', marginTop: '0.25rem' }}>
-                    {format12h(selectedSlot)}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', background: '#f8fafc', padding: '1.25rem', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
+                  <div>
+                    <div style={{ fontSize: '0.625rem', color: '#94a3b8', fontWeight: 800, letterSpacing: '0.05em', marginBottom: '0.35rem' }}>START</div>
+                    <div style={{ fontSize: '1.125rem', fontWeight: 800, color: '#0c4c54' }}>{format12h(selectedSlot)}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.625rem', color: '#94a3b8', fontWeight: 800, letterSpacing: '0.05em', marginBottom: '0.35rem' }}>END</div>
+                    <div style={{ fontSize: '1.125rem', fontWeight: 800, color: '#64748b' }}>{format12h(selectedSlot + duration)}</div>
                   </div>
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem' }}>DURATION</label>
-                  <select 
-                    value={duration} 
-                    onChange={(e) => setDuration(parseInt(e.target.value))}
-                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0', background: 'white', outline: 'none', fontSize: '0.9375rem' }}
-                  >
-                    <option value={15}>15 minutes</option>
-                    <option value={30}>30 minutes</option>
-                    <option value={45}>45 minutes</option>
-                    <option value={60}>60 minutes</option>
-                  </select>
-                  <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#64748b' }}>
-                    Ends at {format12h(selectedSlot + duration)}
+                  <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', marginBottom: '0.75rem', letterSpacing: '0.05em' }}>APPOINTMENT DURATION</label>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    {[30, 60].map(d => (
+                      <button 
+                        key={d}
+                        onClick={() => setDuration(d)}
+                        style={{
+                          flex: 1, minWidth: '60px', padding: '0.625rem 0', borderRadius: '8px', border: '1px solid',
+                          fontSize: '0.875rem', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
+                          background: duration === d ? '#0c4c54' : 'white',
+                          color: duration === d ? 'white' : '#475569',
+                          borderColor: duration === d ? '#0c4c54' : '#e2e8f0'
+                        }}
+                      >
+                        {d}m
+                      </button>
+                    ))}
                   </div>
                 </div>
 
                 <button 
-                  onClick={() => setIsModalOpen(true)}
-                  style={{ 
-                    marginTop: '0.5rem', padding: '0.875rem', borderRadius: '10px', 
-                    background: '#0c4c54', color: 'white', fontWeight: 700, border: 'none', 
-                    cursor: 'pointer', width: '100%', fontSize: '1rem', transition: 'opacity 0.2s' 
+                  onClick={async () => {
+                    console.log('[BookingCenter] Continue to Booking clicked', { selectedSlot, selectedDate, selectedPractice });
+                    try {
+                      setLeadsLoading(true);
+                      setLeadsError(null);
+                      
+                      const { data: { session } } = await supabase.auth.getSession();
+                      const token = session?.access_token;
+                      // When clicking Continue, searchTerm is usually empty, but let's be safe
+                      const q = searchTerm ? `&q=${encodeURIComponent(searchTerm)}` : '';
+                      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-api/admin/leads/search?practice_id=${selectedPractice}${q}`;
+                      
+                      console.log('[BookingCenter] fetching leads from:', url);
+
+                      const res = await fetch(url, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                      });
+
+                      if (!res.ok) {
+                        const errTxt = await res.text();
+                        throw new Error(`Failed to fetch leads: ${res.status} ${errTxt}`);
+                      }
+
+                      const json = await res.json();
+                      const leads = json.data || [];
+                      
+                      console.debug('[BookingCenter] leads search ok', { count: leads.length, q: searchTerm });
+                      setLiveLeads(leads);
+                    } catch (err: any) {
+                      console.error('Error fetching leads:', err);
+                      setLiveLeads([]);
+                      setLeadsError(err.message || 'Unknown error fetching leads');
+                    } finally {
+                      setLeadsLoading(false);
+                      console.log('[BookingCenter] opening modal now');
+                      setIsModalOpen(true);
+                    }
                   }}
-                  onMouseOver={(e) => e.currentTarget.style.opacity = '0.9'}
-                  onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
+                  style={{ 
+                    marginTop: '0.5rem', padding: '1.125rem', borderRadius: '14px', 
+                    background: '#0c4c54', color: 'white', fontWeight: 700, border: 'none', 
+                    cursor: 'pointer', width: '100%', fontSize: '1.0625rem', transition: 'all 0.2s',
+                    boxShadow: '0 8px 20px -4px rgba(12,76,84,0.3)'
+                  }}
+                  onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 24px -4px rgba(12,76,84,0.4)'; }}
+                  onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 8px 20px -4px rgba(12,76,84,0.3)'; }}
                 >
-                  Book Appointment
+                  Continue to Booking
                 </button>
               </div>
             </div>
@@ -295,142 +762,197 @@ export function BookingCenter() {
       {isModalOpen && (
         <div style={{ 
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
-          background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(8px)',
+          background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(10px)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 
         }}>
-          <div style={{ background: 'white', width: '640px', borderRadius: '20px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', overflow: 'hidden' }}>
-            <div style={{ padding: '1.75rem 2rem', borderBottom: '1px solid #f1f5f9' }}>
+          <div style={{ background: 'white', width: '720px', borderRadius: '32px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3)', overflow: 'hidden', animation: 'modalSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+            <style>{`
+              @keyframes modalSlideUp {
+                from { transform: translateY(30px); opacity: 0; }
+                to { transform: translateY(0); opacity: 1; }
+              }
+            `}</style>
+            <div style={{ padding: '2.25rem 3rem', borderBottom: '1px solid #f1f5f9', background: '#fcfdfe' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, color: '#0f172a' }}>Book Appointment</h2>
-                <button onClick={() => setIsModalOpen(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '2rem', lineHeight: 1 }}>×</button>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em' }}>Book Appointment</h2>
+                  <p style={{ margin: '0.35rem 0 0 0', fontSize: '0.9375rem', color: '#64748b', fontWeight: 600 }}>Finalize scheduling for this patient</p>
+                </div>
+                <button onClick={() => setIsModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '1.5rem', width: '36px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }} onMouseOver={e => e.currentTarget.style.background='#e2e8f0'}>×</button>
               </div>
-              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem', color: '#64748b', fontWeight: 500 }}>Times shown in Eastern Time (ET)</p>
             </div>
 
-            <div style={{ padding: '2rem', maxHeight: '75vh', overflowY: 'auto' }}>
+            <div style={{ padding: '2.5rem 3rem', maxHeight: '70vh', overflowY: 'auto' }}>
+              {apiError && (
+                <div style={{ marginBottom: '2rem', padding: '1rem 1.5rem', background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '16px', color: '#991b1b', fontSize: '0.875rem', fontWeight: 600 }}>
+                  ⚠️ {apiError}
+                </div>
+              )}
+
               {/* Summary */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1.2fr', gap: '1.5rem', marginBottom: '2.5rem', background: '#f8fafc', padding: '1.25rem', borderRadius: '12px', border: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '2rem', marginBottom: '2.5rem', background: '#f8fafc', padding: '1.75rem', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
                 <div>
-                  <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 800, letterSpacing: '0.05em' }}>DATE</div>
-                  <div style={{ fontWeight: 700, color: '#0f172a', marginTop: '0.25rem' }}>{new Date(selectedDate).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                  <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: 800, letterSpacing: '0.075em', marginBottom: '0.35rem' }}>APPOINTMENT DATE</div>
+                  <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '1rem' }}>{dateStrToSafeDate(selectedDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 800, letterSpacing: '0.05em' }}>START</div>
-                  <div style={{ fontWeight: 700, color: '#0f172a', marginTop: '0.25rem' }}>{format12h(selectedSlot!)}</div>
+                  <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: 800, letterSpacing: '0.075em', marginBottom: '0.35rem' }}>START TIME</div>
+                  <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '1rem' }}>{format12h(selectedSlot!)}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 800, letterSpacing: '0.05em' }}>DURATION / END</div>
-                  <div style={{ fontWeight: 700, color: '#0f172a', marginTop: '0.25rem' }}>{duration}m • {format12h(selectedSlot! + duration)}</div>
+                  <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: 800, letterSpacing: '0.075em', marginBottom: '0.35rem' }}>END TIME</div>
+                  <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '1rem' }}>{format12h(selectedSlot! + duration)}</div>
                 </div>
               </div>
 
               {/* Patient Selection */}
-              <div style={{ marginBottom: '2.5rem' }}>
-                <h4 style={{ fontSize: '0.75rem', color: '#475569', fontWeight: 800, letterSpacing: '0.05em', marginBottom: '1rem', textTransform: 'uppercase' }}>Search Existing Leads</h4>
+              <div style={{ marginBottom: '3rem' }}>
+                <h4 style={{ fontSize: '0.75rem', color: '#1e293b', fontWeight: 800, letterSpacing: '0.075em', marginBottom: '1.25rem', textTransform: 'uppercase' }}>Search Existing Leads</h4>
                 <div style={{ position: 'relative' }}>
                   <input 
-                    placeholder="Search by name, email, or phone..." 
+                    placeholder="Search by name, email, or phone number..." 
                     value={searchTerm}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    style={{ width: '100%', padding: '0.875rem 1.25rem', borderRadius: '10px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none', fontSize: '1rem', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02)' }}
+                    style={{ width: '100%', padding: '1.125rem 1.5rem', borderRadius: '16px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none', fontSize: '1.0625rem', background: '#fcfdfe', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)', transition: 'all 0.2s' }}
+                    onFocus={e => e.currentTarget.style.borderColor = '#0c4c54'}
+                    onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
                   />
+                  <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.5rem', fontFamily: 'monospace' }}>
+                    Search: "{searchTerm}" | liveLeads: {liveLeads.length} | filtered: {filteredLeads.length} | leadsLoading: {String(leadsLoading)} | leadsError: {leadsError ?? "none"} | modalOpens: {modalOpenCount}
+                  </div>
                 </div>
                 
-                {searchTerm && (
-                  <div style={{ marginTop: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
-                    {filteredLeads.length > 0 ? filteredLeads.map(l => (
+                <div style={{ marginTop: '1rem', border: '1px solid #e2e8f0', borderRadius: '20px', overflow: 'hidden', minHeight: '140px', maxHeight: '280px', overflowY: 'auto', background: '#f8fafc' }}>
+                  {leadsLoading ? (
+                    <div style={{ padding: '3.5rem', textAlign: 'center', fontSize: '0.9375rem', color: '#94a3b8', fontWeight: 500 }}>
+                      <span style={{ fontSize: '1.5rem', display: 'block', marginBottom: '0.5rem' }}>⏳</span>
+                      Loading leads...
+                    </div>
+                  ) : leadsError ? (
+                    <div style={{ padding: '2.5rem 2rem', textAlign: 'center', fontSize: '0.875rem', color: '#991b1b', background: '#fef2f2' }}>
+                      <span style={{ fontSize: '1.5rem', display: 'block', marginBottom: '0.5rem' }}>⚠️</span>
+                      <strong>Error: {leadsError}</strong>
+                      <p style={{ marginTop: '0.5rem', color: '#7f1d1d', fontSize: '0.75rem' }}>
+                        If this says permission denied / RLS, Admin Portal cannot read public.leads directly.
+                      </p>
+                    </div>
+                  ) : filteredLeads.length > 0 ? filteredLeads.map(l => {
+                    const displayName = `${l.first_name ?? ''} ${l.last_name ?? ''}`.trim() || '(Unnamed lead)';
+                    return (
                       <div 
                         key={l.id} 
-                        onClick={() => handleConfirmBooking(`${l.first_name} ${l.last_name}`)}
-                        style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', background: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                        onMouseOver={(e) => e.currentTarget.style.background = '#f8fafc'}
+                        onClick={() => handleConfirmBooking({ id: l.id, name: displayName })}
+                        style={{ padding: '1.25rem 1.75rem', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', background: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s' }}
+                        onMouseOver={(e) => e.currentTarget.style.background = '#f0fdfa'}
                         onMouseOut={(e) => e.currentTarget.style.background = 'white'}
                       >
                         <div>
-                          <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#0f172a' }}>{l.first_name} {l.last_name}</div>
-                          <div style={{ fontSize: '0.8125rem', color: '#64748b', marginTop: '0.125rem' }}>{l.email} • {l.phone}</div>
+                          <div style={{ fontWeight: 700, fontSize: '1.0625rem', color: '#0f172a' }}>{displayName}</div>
+                          <div style={{ fontSize: '0.875rem', color: '#64748b', marginTop: '0.25rem' }}>{l.email ?? 'No email'} • {l.phone ?? 'No phone'}</div>
                         </div>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#0c4c54', background: '#e0f2f1', padding: '4px 10px', borderRadius: '6px' }}>Select</span>
+                        <button style={{ fontSize: '0.75rem', fontWeight: 800, color: '#0c4c54', background: '#e0f2f1', padding: '0.625rem 1.25rem', borderRadius: '100px', border: 'none', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={e => e.currentTarget.style.background='#b2dfdb'}>SELECT</button>
                       </div>
-                    )) : (
-                      <div style={{ padding: '1.5rem', textAlign: 'center', fontSize: '0.9375rem', color: '#64748b', background: '#f8fafc' }}>No matching leads found.</div>
-                    )}
-                  </div>
-                )}
+                    );
+                  }) : (
+                    <div style={{ padding: '3.5rem', textAlign: 'center', fontSize: '0.9375rem', color: '#64748b', background: 'white' }}>
+                      <span style={{ fontSize: '1.5rem', display: 'block', marginBottom: '0.5rem' }}>📂</span>
+                      No leads found yet. Create a new patient below.
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', margin: '2.5rem 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', margin: '3.5rem 0' }}>
                 <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }} />
-                <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 800, letterSpacing: '0.1em' }}>OR REGISTER NEW PATIENT</span>
+                <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 800, letterSpacing: '0.15em' }}>NEW PATIENT REGISTRATION</span>
                 <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }} />
               </div>
 
               {/* New Patient Form */}
               <div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.75rem' }}>
                   <div className="form-group">
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem', textTransform: 'uppercase' }}>First Name</label>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>First Name</label>
                     <input 
+                      placeholder="Michael"
                       value={newPatient.first} 
                       onChange={e => setNewPatient({...newPatient, first: e.target.value})}
-                      style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none' }} 
+                      style={{ width: '100%', padding: '1rem 1.25rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none', fontSize: '1rem', transition: 'all 0.2s' }} 
+                      onFocus={e => e.currentTarget.style.borderColor = '#0c4c54'}
+                      onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
                     />
                   </div>
                   <div className="form-group">
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Last Name</label>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Last Name</label>
                     <input 
+                      placeholder="Jordan"
                       value={newPatient.last} 
                       onChange={e => setNewPatient({...newPatient, last: e.target.value})}
-                      style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none' }} 
+                      style={{ width: '100%', padding: '1rem 1.25rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none', fontSize: '1rem', transition: 'all 0.2s' }} 
+                      onFocus={e => e.currentTarget.style.borderColor = '#0c4c54'}
+                      onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
                     />
                   </div>
                   <div className="form-group">
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Phone Number</label>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Phone Number</label>
                     <input 
+                      placeholder="(555) 000-0000"
                       value={newPatient.phone} 
                       onChange={e => setNewPatient({...newPatient, phone: e.target.value})}
-                      style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none' }} 
+                      style={{ width: '100%', padding: '1rem 1.25rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none', fontSize: '1rem', transition: 'all 0.2s' }} 
+                      onFocus={e => e.currentTarget.style.borderColor = '#0c4c54'}
+                      onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
                     />
                   </div>
                   <div className="form-group">
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Email (Optional)</label>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Email Address</label>
                     <input 
+                      placeholder="patient@example.com"
                       value={newPatient.email} 
                       onChange={e => setNewPatient({...newPatient, email: e.target.value})}
-                      style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none' }} 
+                      style={{ width: '100%', padding: '1rem 1.25rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none', fontSize: '1rem', transition: 'all 0.2s' }} 
+                      onFocus={e => e.currentTarget.style.borderColor = '#0c4c54'}
+                      onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
                     />
                   </div>
                 </div>
-                <div style={{ marginTop: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', background: '#eff6ff', borderRadius: '8px', border: '1px solid #dbeafe' }}>
-                  <span style={{ fontSize: '1rem' }}>ℹ️</span>
-                  <p style={{ margin: 0, fontSize: '0.8125rem', color: '#1e40af', fontWeight: 500 }}>A new lead record will be created automatically upon confirmation.</p>
+                {!newPatient.first || !newPatient.last ? (
+                  <p style={{ margin: '1.25rem 0 0 0', fontSize: '0.8125rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '1rem' }}>⚠️</span> First and last name required to confirm
+                  </p>
+                ) : null}
+                <div style={{ marginTop: '2rem', display: 'flex', alignItems: 'center', gap: '1rem', padding: '1.25rem 1.5rem', background: '#f0f9ff', borderRadius: '16px', border: '1px solid #e0f2fe' }}>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#bae6fd', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0369a1', fontSize: '1rem' }}>💡</div>
+                  <div>
+                    <p style={{ margin: 0, fontSize: '0.875rem', color: '#0369a1', fontWeight: 600 }}>A new patient lead record will be created automatically upon confirmation.</p>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div style={{ padding: '1.5rem 2rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: '1rem', background: '#f8fafc' }}>
+            <div style={{ padding: '2rem 3rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: '1rem', background: '#fcfdfe' }}>
               <button 
                 onClick={() => setIsModalOpen(false)}
-                style={{ padding: '0.75rem 1.5rem', borderRadius: '10px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', fontWeight: 700, color: '#475569', transition: 'all 0.2s' }}
-                onMouseOver={(e) => e.currentTarget.style.borderColor = '#cbd5e1'}
-                onMouseOut={(e) => e.currentTarget.style.borderColor = '#e2e8f0'}
+                style={{ padding: '1rem 2rem', borderRadius: '14px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', fontWeight: 700, color: '#64748b', transition: 'all 0.2s', fontSize: '1rem' }}
+                onMouseOver={(e) => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
+                onMouseOut={(e) => { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
               >
                 Cancel
               </button>
-              <button 
-                disabled={!newPatient.first || !newPatient.last}
-                onClick={() => handleConfirmBooking(`${newPatient.first} ${newPatient.last}`)}
-                style={{ 
-                  padding: '0.75rem 2rem', borderRadius: '10px', border: 'none', 
-                  background: (!newPatient.first || !newPatient.last) ? '#cbd5e1' : '#0c4c54', 
-                  color: 'white', cursor: (!newPatient.first || !newPatient.last) ? 'not-allowed' : 'pointer', 
-                  fontWeight: 700, fontSize: '1rem', transition: 'all 0.2s' 
-                }}
-                onMouseOver={(e) => { if(newPatient.first && newPatient.last) e.currentTarget.style.opacity = '0.9' }}
-                onMouseOut={(e) => { if(newPatient.first && newPatient.last) e.currentTarget.style.opacity = '1' }}
-              >
-                Confirm Booking
-              </button>
+                     <button 
+                       disabled={true} // Disabled for now per requirements
+                       onClick={() => {}} // handleConfirmBooking not supported for new patients yet
+                       style={{ 
+                         padding: '1rem 2.5rem', borderRadius: '14px', border: 'none', 
+                         background: '#f1f5f9', 
+                         color: '#cbd5e1', 
+                         cursor: 'not-allowed', 
+                         fontWeight: 800, fontSize: '1.0625rem', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                         boxShadow: 'none'
+                       }}
+                     >
+                       {apiLoading ? 'Creating...' : 'Confirm Booking'}
+                     </button>
             </div>
           </div>
         </div>
@@ -438,4 +960,3 @@ export function BookingCenter() {
     </div>
   );
 }
-
