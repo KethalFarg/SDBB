@@ -138,10 +138,10 @@ export function Appointments() {
         if (leadsRes.error) throw leadsRes.error;
         if (apptsRes.error) throw apptsRes.error;
 
-        const fetchedLeads = leadsRes.data || [];
-        const bookedIds = new Set((apptsRes.data || []).map(a => a.lead_id));
+        const fetchedLeads: Lead[] = leadsRes.data || [];
+        const bookedIds = new Set((apptsRes.data || []).map((a: { lead_id: string }) => a.lead_id));
         
-        const eligibleLeads = fetchedLeads.filter(l => !bookedIds.has(l.id));
+        const eligibleLeads = fetchedLeads.filter((l: Lead) => !bookedIds.has(l.id));
         
         setLeads(eligibleLeads);
         setTotalLeadsFound(fetchedLeads.length);
@@ -307,7 +307,7 @@ export function Appointments() {
 
   const filtered = useMemo(() => {
     const now = new Date();
-    const activeOnly = appointments.filter((a) => {
+    const activeOnly = appointments.filter((a: Appointment) => {
       if (a.status === 'hold') {
         if (!a.expires_at) return true;
         return new Date(a.expires_at) > now;
@@ -317,7 +317,7 @@ export function Appointments() {
 
     const term = q.trim().toLowerCase();
     if (!term) return activeOnly;
-    return activeOnly.filter((a) => {
+    return activeOnly.filter((a: Appointment) => {
       const patientName = `${a.leads?.first_name ?? ''} ${a.leads?.last_name ?? ''}`.toLowerCase();
       const patientContact = `${a.leads?.email ?? ''} ${a.leads?.phone ?? ''}`.toLowerCase();
       return (
@@ -349,7 +349,7 @@ export function Appointments() {
   };
 
   const getSourceLabel = (source: string) => {
-    return source.replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+    return source.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
   };
 
   if (!session || loadingPractice || (loading && appointments.length === 0)) return <LoadingState />;

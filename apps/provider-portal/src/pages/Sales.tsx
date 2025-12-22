@@ -9,9 +9,22 @@ import { supabase } from '../supabaseClient';
 import { usePracticeId } from '../hooks/usePracticeId';
 import { Link } from 'react-router-dom';
 
+type Appointment = {
+  id: string;
+  start_time: string;
+  status: string;
+  sales_outcome: string | null;
+  objection: string | null;
+  lead_id: string | null;
+  leads: {
+    first_name: string | null;
+    last_name: string | null;
+  } | null;
+};
+
 export function Sales() {
   const { practiceId, loading: loadingPractice } = usePracticeId();
-  const [appointments, setAppointments] = useState<any[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -46,7 +59,7 @@ export function Sales() {
 
       // Deduplicate by lead_id, keeping the latest one (first in descending order)
       const seenLeads = new Set();
-      const deduped = (data || []).filter(appt => {
+      const deduped = (data as Appointment[] || []).filter((appt: Appointment) => {
         if (!appt.lead_id) return true; // Keep if no lead_id (shouldn't happen)
         if (seenLeads.has(appt.lead_id)) return false;
         seenLeads.add(appt.lead_id);
@@ -140,7 +153,7 @@ export function Sales() {
           />
         }
       >
-        {appointments.map((appt) => (
+        {appointments.map((appt: Appointment) => (
           <tr key={appt.id}>
             <td>{new Date(appt.start_time).toLocaleDateString()}</td>
             <td style={{ fontWeight: 600 }}>
