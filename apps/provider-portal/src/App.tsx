@@ -1,6 +1,18 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
+import { 
+  LayoutDashboard, 
+  Users, 
+  ClipboardList, 
+  CalendarDays, 
+  Clock, 
+  TrendingUp, 
+  Settings as SettingsIcon 
+} from 'lucide-react';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Login } from './pages/Login';
+import { Signup } from './pages/Signup';
+import { ForgotPassword } from './pages/ForgotPassword';
+import { UpdatePassword } from './pages/UpdatePassword';
 import { Dashboard } from './pages/Dashboard';
 import { Availability } from './pages/Availability';
 import { Leads } from './pages/Leads';
@@ -38,35 +50,62 @@ function Layout({ children }: { children: React.ReactNode }) {
         
         <nav className="nav-menu">
           <Link to="/dashboard" className={`nav-link ${isActive('/dashboard') ? 'active' : ''}`}>
-            Dashboard
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <LayoutDashboard size={18} />
+              <span>Dashboard</span>
+            </div>
           </Link>
           
           <div className="nav-group">
             <span className="nav-group-title">Patients</span>
             <Link to="/leads" className={`nav-link ${isActive('/leads') ? 'active' : ''}`}>
-              Leads
-              <span className="nav-helper">Initial inquiries</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <Users size={18} />
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span>Leads Center</span>
+                  <span className="nav-helper">Initial inquiries</span>
+                </div>
+              </div>
             </Link>
             <Link to="/assessments" className={`nav-link ${isActive('/assessments') ? 'active' : ''}`}>
-              Assessments
-              <span className="nav-helper">Quiz completed</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <ClipboardList size={18} />
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span>Assessments</span>
+                  <span className="nav-helper">Quiz completed</span>
+                </div>
+              </div>
             </Link>
             <Link to="/appointments" className={`nav-link ${isActive('/appointments') ? 'active' : ''}`}>
-              Appointments
-              <span className="nav-helper">Scheduled sessions</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <CalendarDays size={18} />
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span>Booking Center</span>
+                  <span className="nav-helper">Scheduled sessions</span>
+                </div>
+              </div>
             </Link>
           </div>
 
           <div className="nav-group">
             <span className="nav-group-title">Practice</span>
             <Link to="/availability" className={`nav-link ${isActive('/availability') ? 'active' : ''}`}>
-              Availability
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <Clock size={18} />
+                <span>Availability</span>
+              </div>
             </Link>
             <Link to="/sales" className={`nav-link ${isActive('/sales') ? 'active' : ''}`}>
-              Sales & Outcomes
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <TrendingUp size={18} />
+                <span>Sales & Outcomes</span>
+              </div>
             </Link>
             <Link to="/settings" className={`nav-link ${isActive('/settings') ? 'active' : ''}`}>
-              Settings
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <SettingsIcon size={18} />
+                <span>Settings</span>
+              </div>
             </Link>
           </div>
         </nav>
@@ -106,6 +145,9 @@ export default function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/update-password" element={<UpdatePassword />} />
         <Route path="/" element={<Navigate to="/dashboard" />} />
         <Route path="/dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
         <Route path="/leads" element={<ProtectedRoute><Layout><Leads /></Layout></ProtectedRoute>} />

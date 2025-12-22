@@ -268,26 +268,108 @@ serve(async (req) => {
         const timezone = await getPracticeTimezone(supabase, practiceId);
         
         // Use the new robust RPC for timezone-aware date filtering
-        const { data, error } = await supabaseAdmin.rpc('admin_get_appointments_for_date', {
+        const { data: apptRows, error: rpcError } = await supabaseAdmin.rpc('admin_get_appointments_for_date', {
           p_practice_id: practiceId,
           p_date: date,
           p_tz: timezone
         });
 
-        if (error) throw error;
+        if (rpcError) throw rpcError;
 
-        console.info(`booking-api appointments fetch | practice=${practiceId} date=${date} tz=${timezone} count=${data?.length ?? 0}`);
+        // Fetch full appointment details including joined leads using service role
+        let appointmentsWithLeads = [];
+        const apptIds = (apptRows || []).map((a: any) => a.id);
+        
+        if (apptIds.length > 0) {
+          const { data, error: joinError } = await supabaseAdmin
+            .from('appointments')
+            .select(`
+              *,
+              lead:leads!appointments_lead_id_fkey (
+                id,
+                first_name,
+                last_name,
+                email,
+                phone
+              )
+            `)
+            .in('id', apptIds)
+            .order('start_time', { ascending: true });
+          
+          if (joinError) throw joinError;
+          appointmentsWithLeads = data || [];
+        }
+
+        console.info(`booking-api appointments fetch | practice=${practiceId} date=${date} tz=${timezone} count=${appointmentsWithLeads.length}`);
 
         return new Response(JSON.stringify({
           data: {
             practice_id: practiceId,
             date,
             timezone,
-            appointments: data
+            appointments: appointmentsWithLeads
           }
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       } catch (err) {
         return new Response(JSON.stringify({ error: err.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
+    // POST /provider/leads (Provider-safe lead creation)
+    if (req.method === 'POST' && path.endsWith('/provider/leads')) {
+      console.log('[booking-api] provider lead creation handler', path);
+      let supabase;
+      try { supabase = getAuthClient(req); } catch(e) { return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }); }
+
+      try {
+        const { practiceId } = await getMyPracticeId(supabase);
+        const { first_name, last_name, phone, email } = await req.json();
+
+        if (!first_name || !last_name || !phone) {
+          return new Response(JSON.stringify({ error: 'First name, last name, and phone are required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        if (!supabaseAdmin) throw new Error('Server configuration error (admin client missing)');
+
+        // Duplicate check within SAME practice
+        let query = supabaseAdmin.from('leads').select('id').eq('practice_id', practiceId);
+        if (email) {
+          query = query.or(`phone.eq.${phone},email.eq.${email}`);
+        } else {
+          query = query.eq('phone', phone);
+        }
+
+        const { data: existing, error: checkErr } = await query.limit(1);
+        if (checkErr) throw checkErr;
+
+        if (existing && existing.length > 0) {
+          return new Response(JSON.stringify({ 
+            error: 'lead_exists', 
+            message: 'Lead already exists — please select it',
+            lead_id: existing[0].id 
+          }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        // Create the lead
+        const { data: newLead, error: insertErr } = await supabaseAdmin
+          .from('leads')
+          .insert({
+            first_name,
+            last_name,
+            phone,
+            email,
+            practice_id: practiceId,
+            source: 'manual'
+          })
+          .select()
+          .single();
+
+        if (insertErr) throw insertErr;
+
+        return new Response(JSON.stringify({ data: newLead }), { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      } catch (err) {
+        console.error('[booking-api] provider lead creation error:', err);
+        return new Response(JSON.stringify({ error: err.message }), { status: err.message === 'No practice assigned' ? 403 : 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
     }
 
@@ -299,7 +381,7 @@ serve(async (req) => {
 
       const practiceId = confirmMatch[1];
       const body = await req.json();
-      const { lead_id, start_time, end_time, source } = body;
+      const { lead_id, start_time, end_time, source, notes } = body;
 
       if (!lead_id || !start_time || !end_time) {
         return new Response(JSON.stringify({ error: 'Missing required fields: lead_id, start_time, end_time' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -333,7 +415,8 @@ serve(async (req) => {
             end_time,
             status: 'scheduled',
             source: source || 'call_center',
-            created_by: 'admin_portal'
+            created_by: 'admin_portal',
+            notes: notes || null
           })
           .select()
           .single();

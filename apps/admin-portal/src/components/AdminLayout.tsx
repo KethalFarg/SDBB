@@ -26,6 +26,15 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           <h2 style={{ margin: 0, fontSize: '1.25rem' }}>SD Admin</h2>
           <nav style={{ display: 'flex', gap: '1rem' }}>
             <button 
+              onClick={() => navigate('/admin/dashboard')}
+              style={{ 
+                background: isActive('/admin/dashboard') ? 'rgba(255,255,255,0.2)' : 'transparent',
+                border: 'none', color: 'white', padding: '0.5rem 1rem', cursor: 'pointer', borderRadius: '4px'
+              }}
+            >
+              Dashboard
+            </button>
+            <button 
               onClick={() => navigate('/admin/map')}
               style={{ 
                 background: isActive('/admin/map') ? 'rgba(255,255,255,0.2)' : 'transparent',

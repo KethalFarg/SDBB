@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { supabase, envMissing } from '../supabaseClient';
 import { useSession } from '../hooks/useSession';
 
@@ -67,7 +67,10 @@ export function Login() {
           </div>
 
           <div className="form-group">
-            <label>Password</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label>Password</label>
+              <Link to="/forgot-password" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Forgot password?</Link>
+            </div>
             <input 
               type="password" 
               className="form-control"
@@ -82,11 +85,16 @@ export function Login() {
             type="submit" 
             className="btn btn-primary" 
             disabled={loading} 
-            style={{ width: '100%', marginTop: '0.5rem', padding: '0.875rem' }}
+            style={{ width: '100%', marginTop: '1rem', padding: '0.875rem' }}
           >
             {loading ? 'Authenticating...' : 'Sign In'}
           </button>
         </form>
+
+        <div style={{ marginTop: '2rem', textAlign: 'center', fontSize: '0.875rem' }}>
+          <span style={{ color: 'var(--color-text-muted)' }}>Don't have an account? </span>
+          <Link to="/signup" style={{ fontWeight: 600 }}>Sign Up</Link>
+        </div>
         
         <div className="login-footer">
           &copy; {new Date().getFullYear()} SpinalDecompression.com

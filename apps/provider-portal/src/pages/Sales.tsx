@@ -39,10 +39,21 @@ export function Sales() {
           )
         `)
         .eq('practice_id', practiceId)
+        .neq('status', 'canceled')
         .order('start_time', { ascending: false });
 
       if (error) throw error;
-      setAppointments(data || []);
+
+      // Deduplicate by lead_id, keeping the latest one (first in descending order)
+      const seenLeads = new Set();
+      const deduped = (data || []).filter(appt => {
+        if (!appt.lead_id) return true; // Keep if no lead_id (shouldn't happen)
+        if (seenLeads.has(appt.lead_id)) return false;
+        seenLeads.add(appt.lead_id);
+        return true;
+      });
+
+      setAppointments(deduped);
     } catch (err: any) {
       setError(err.message);
     } finally {

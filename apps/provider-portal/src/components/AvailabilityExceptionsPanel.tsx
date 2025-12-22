@@ -27,7 +27,7 @@ const to24h = (hour: string, minute: string, ampm: string): string => {
 
 export function AvailabilityExceptionsPanel({ practiceId }: Props) {
   const [exceptions, setExceptions] = useState<AvailabilityException[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Form state

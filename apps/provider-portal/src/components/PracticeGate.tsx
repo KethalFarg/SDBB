@@ -22,11 +22,19 @@ export function PracticeGate({ practice, loading, error, children }: PracticeGat
 
   if (!practice) {
     return (
-      <PageShell title="Access Restricted">
-        <EmptyState 
-          title="No Practice Assigned" 
-          description="Your account isn't linked to a practice yet. Please contact support." 
-        />
+      <PageShell title="Account Pending Setup">
+        <div className="card" style={{ maxWidth: '600px', margin: '4rem auto', textAlign: 'center', padding: '4rem 3rem' }}>
+          <div style={{ fontSize: '3rem', marginBottom: '1.5rem' }}>⏳</div>
+          <h2 style={{ marginBottom: '1rem', color: 'var(--color-text-main)' }}>Your account is created!</h2>
+          <p style={{ color: 'var(--color-text-muted)', fontSize: '1.1rem', lineHeight: '1.6', marginBottom: '2rem' }}>
+            However, your profile is not yet linked to a clinic. Please contact support to complete your practice registration.
+          </p>
+          <div style={{ paddingTop: '2rem', borderTop: '1px solid var(--color-border)' }}>
+            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-light)' }}>
+              Once linked, you'll be able to manage leads, availability, and bookings here.
+            </p>
+          </div>
+        </div>
       </PageShell>
     );
   }

@@ -27,6 +27,8 @@ const DAYS = [
   'Saturday'
 ];
 
+const RENDER_DAYS = [1, 2, 3, 4, 5, 6]; // Monday through Saturday
+
 // Helper: Convert "HH:MM" or "HH:MM:SS" to minutes since midnight
 const timeToMinutes = (timeStr: string): number => {
   const [h, m] = timeStr.split(':').map(Number);
@@ -377,9 +379,9 @@ export function Availability() {
             <thead>
               <tr>
                 <th style={{ width: '100px', padding: '1rem', borderBottom: '1px solid var(--color-border)', borderRight: '1px solid var(--color-border)', backgroundColor: '#f8fafc' }}></th>
-                {DAYS.map((day) => (
-                  <th key={day} style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)', borderRight: '1px solid var(--color-border)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text-main)', backgroundColor: '#f8fafc' }}>
-                    {day}
+                {RENDER_DAYS.map((dayIdx) => (
+                  <th key={DAYS[dayIdx]} style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)', borderRight: '1px solid var(--color-border)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text-main)', backgroundColor: '#f8fafc' }}>
+                    {DAYS[dayIdx]}
                   </th>
                 ))}
               </tr>
@@ -390,7 +392,7 @@ export function Availability() {
                   <td style={{ padding: '0.5rem', borderBottom: '1px solid var(--color-border)', borderRight: '1px solid var(--color-border)', fontSize: '0.75rem', color: 'var(--color-text-muted)', textAlign: 'center', backgroundColor: '#f8fafc', fontWeight: 500 }}>
                     {formatTimeLabel(m, use12h)}
                   </td>
-                  {DAYS.map((_, dayIdx) => {
+                  {RENDER_DAYS.map((dayIdx) => {
                     const block = isSlotCovered(dayIdx, m);
                     const isAvailable = !!block;
                     const slotLabel = formatTimeLabel(m, use12h);
@@ -450,7 +452,7 @@ export function Availability() {
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label>Day of Week</label>
                   <select className="form-control" value={dayOfWeek} onChange={e => setDayOfWeek(parseInt(e.target.value))} disabled={submitting}>
-                    {DAYS.map((day, idx) => <option key={day} value={idx}>{day}</option>)}
+                    {RENDER_DAYS.map((dayIdx) => <option key={DAYS[dayIdx]} value={dayIdx}>{DAYS[dayIdx]}</option>)}
                   </select>
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
@@ -474,7 +476,8 @@ export function Availability() {
             </div>
 
             <div className="dashboard-sections">
-              {DAYS.map((day, dayIdx) => {
+              {RENDER_DAYS.map((dayIdx) => {
+                const day = DAYS[dayIdx];
                 const dayBlocks = blocks.filter(b => b.day_of_week === dayIdx);
                 if (dayBlocks.length === 0) return null;
                 return (

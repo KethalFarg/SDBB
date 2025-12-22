@@ -237,6 +237,45 @@ serve(async (req) => {
       return new Response(JSON.stringify({ deleted_count: data?.length ?? 0 }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // POST /admin/leads (creation)
+    if (req.method === 'POST' && path.includes('/admin/leads') && !path.includes('reassign') && !path.includes('unassign')) {
+      console.log('[admin-api] ROUTE', 'admin/leads (POST creation)')
+      const { first_name, last_name, phone, email, practice_id } = await req.json();
+      
+      // Simple duplicate check
+      let query = supabase.from('leads').select('id').eq('practice_id', practice_id);
+      if (email && phone) {
+        query = query.or(`phone.eq.${phone},email.eq.${email}`);
+      } else if (phone) {
+        query = query.eq('phone', phone);
+      } else if (email) {
+        query = query.eq('email', email);
+      }
+
+      const { data: existingLeads, error: checkError } = await query.limit(1);
+        
+      if (checkError) throw checkError;
+      if (existingLeads && existingLeads.length > 0) {
+        return new Response(JSON.stringify({ error: 'Lead already exists — please select it' }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const { data, error } = await supabase
+        .from('leads')
+        .insert({
+          first_name,
+          last_name,
+          phone,
+          email,
+          practice_id,
+          source: 'manual'
+        })
+        .select()
+        .single();
+        
+      if (error) throw error;
+      return new Response(JSON.stringify({ data }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     // GET /admin/practices
     if (req.method === 'GET' && path.includes('/admin/practices')) {
       console.log('[admin-api] ROUTE', 'admin/practices (GET)')
@@ -309,14 +348,15 @@ serve(async (req) => {
     // POST /admin/appointments/create
     if (req.method === 'POST' && path.includes('/admin/appointments/create')) {
       console.log('[admin-api] ROUTE', 'admin/appointments/create')
-      const { practice_id, lead_id, start_at, end_at, source } = await req.json();
+      const { practice_id, lead_id, start_at, end_at, source, notes } = await req.json();
       const { data, error } = await supabase.rpc('admin_create_appointment', {
         p_practice_id: practice_id,
         p_lead_id: lead_id,
         p_start_time: start_at,
         p_end_time: end_at,
         p_source: source,
-        p_created_by: adminUserId
+        p_created_by: adminUserId,
+        p_notes: notes || null
       });
       if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       return new Response(JSON.stringify({ appointment: data }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -333,6 +373,23 @@ serve(async (req) => {
         lead_created_at: row.leads?.created_at
       }));
       return new Response(JSON.stringify({ data: mapped }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // GET /admin/appointments/active
+    if (req.method === 'GET' && path.includes('/admin/appointments/active')) {
+      console.log('[admin-api] ROUTE', 'admin/appointments/active')
+      const practice_id = url.searchParams.get('practice_id');
+      if (!practice_id) return new Response(JSON.stringify({ error: 'practice_id is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('id, lead_id, status, expires_at, start_time, end_time')
+        .eq('practice_id', practice_id)
+        .in('status', ['scheduled', 'hold'])
+        .or(`status.neq.hold,expires_at.is.null,expires_at.gt.${new Date().toISOString()}`);
+
+      if (error) throw error;
+      return new Response(JSON.stringify({ data }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // --- PARAMETERIZED ROUTES (REGEX) ---
@@ -417,18 +474,45 @@ serve(async (req) => {
       return await linkUserToPractice(supabase, adminUserId, targetUserId, practiceId, role || 'practice_user');
     }
 
-    // POST /designation_review/:id/assign
-    const assignMatch = path.match(/\/designation_review\/([^\/]+)\/assign$/);
-    if (req.method === 'POST' && assignMatch) {
-      console.log('[admin-api] ROUTE', 'designation_review/:id/assign (POST)')
-      const reviewId = assignMatch[1];
-      const { assigned_practice_id } = await req.json();
-      const { error } = await supabase.rpc('admin_assign_designation_review', { p_review_id: reviewId, p_assigned_practice_id: assigned_practice_id, p_admin_user_id: adminUserId });
-      if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
+            // POST /designation_review/:id/assign
+            const assignMatch = path.match(/\/designation_review\/([^\/]+)\/assign$/);
+            if (req.method === 'POST' && assignMatch) {
+              console.log('[admin-api] ROUTE', 'designation_review/:id/assign (POST)')
+              const reviewId = assignMatch[1];
+              const { assigned_practice_id } = await req.json();
+              const { error } = await supabase.rpc('admin_assign_designation_review', { p_review_id: reviewId, p_assigned_practice_id: assigned_practice_id, p_admin_user_id: adminUserId });
+              if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+              return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+            }
 
-    console.log('[admin-api] NO_MATCH', path)
+            // POST /admin/appointments/:id/cancel
+            const cancelApptMatch = path.match(/\/admin\/appointments\/([^\/]+)\/cancel$/);
+            if (req.method === 'POST' && cancelApptMatch) {
+              console.log('[admin-api] ROUTE', 'admin/appointments/:id/cancel')
+              const apptId = cancelApptMatch[1];
+              
+              // Direct update using service role (bypass RLS)
+              const { data, error } = await supabase
+                .from('appointments')
+                .update({ status: 'canceled' })
+                .eq('id', apptId)
+                .select()
+                .single();
+
+              if (error) throw error;
+
+              // Audit log
+              await supabase.from('audit_log').insert({
+                entity_type: 'appointment',
+                entity_id: apptId,
+                action: 'cancel',
+                performed_by: adminUserId
+              });
+
+              return new Response(JSON.stringify({ success: true, appointment: data }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+            }
+
+            console.log('[admin-api] NO_MATCH', path)
     return new Response('Not Found', { status: 404, headers: corsHeaders })
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });

@@ -53,7 +53,7 @@ function circlePolygon(lng: number, lat: number, radiusMiles: number, steps = 64
 export function PracticeOnboarding() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
+  // const [loading, setLoading] = useState(false);
   const [saving, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<any>(null);
@@ -513,8 +513,6 @@ export function PracticeOnboarding() {
       map.flyTo({ center: [lng, lat], zoom: 10 });
     }
   }, [formData.lat, formData.lng, formData.radius_miles]);
-
-  if (loading) return <div style={{ padding: '2rem' }}>Loading practice data...</div>;
 
   const latReadOnly = !allowManualCoords && !!formData.lat;
   const lngReadOnly = !allowManualCoords && !!formData.lng;

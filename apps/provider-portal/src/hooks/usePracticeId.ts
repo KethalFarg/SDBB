@@ -21,7 +21,7 @@ export function usePracticeId() {
       try {
         const { data, error: userError } = await supabase
           .from('practice_users')
-          .select('practice_id, practices(id, name, status)')
+          .select('practice_id, practices(id, name, status, booking_settings, timezone)')
           .eq('user_id', session!.user.id)
           .limit(1);
 

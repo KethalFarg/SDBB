@@ -87,7 +87,7 @@ export function Leads() {
 
   if (!practiceId) {
     return (
-      <PageShell title="Leads">
+      <PageShell title="Leads Center">
         <EmptyState 
           title="No Practice Assigned" 
           description="No practice assigned to this account. Contact support." 
@@ -98,14 +98,14 @@ export function Leads() {
 
   return (
     <PageShell 
-      title="Leads" 
+      title="Leads Center" 
       subtitle="Patients who have expressed interest in spinal decompression"
       actions={
         <div style={{ display: 'flex', gap: '1rem' }}>
           <input
             type="text"
             className="input-search input-sm"
-            placeholder="Search leads..."
+            placeholder="Search leads center..."
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />

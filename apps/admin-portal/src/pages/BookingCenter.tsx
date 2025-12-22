@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
 // Helper: 12-hour AM/PM
@@ -10,21 +11,19 @@ const format12h = (minutes: number) => {
   return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
 };
 
-// Helper: Get day of week (0-6) for a date string in a specific timezone
+// Helper: Map JS day (Sun=0..Sat=6) to DB day (Sun=0..Sat=6)
+const toDbDayOfWeek = (jsDay: number) => jsDay;
+
+// Helper: Get day of week (Sun=0..Sat=6) for a date string in a specific timezone
 const getPracticeDayOfWeek = (dateStr: string, tz: string): number => {
   try {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: tz,
-      weekday: 'narrow'
-    }).formatToParts(new Date(dateStr + 'T12:00:00')); // Use noon to avoid day shifts
-    
-    // Fallback if needed, but Intl is reliable. 
-    // Manual mapping for safety:
     const d = new Date(dateStr + 'T12:00:00');
     const localD = new Date(d.toLocaleString('en-US', { timeZone: tz }));
-    return localD.getDay();
+    const jsDay = localD.getDay();
+    return toDbDayOfWeek(jsDay);
   } catch (e) {
-    return new Date(dateStr).getDay();
+    const jsDay = new Date(dateStr).getDay();
+    return toDbDayOfWeek(jsDay);
   }
 };
 
@@ -96,12 +95,14 @@ function getTodayDateStrInTZ(tz: string) {
 }
 
 // Helper: Check if slot is enabled by availability blocks
-const isSlotEnabled = (slotStart: number, slotEnd: number, blocks: any[]): boolean => {
+const isSlotWithinAvailability = (slotStart: number, slotEnd: number, blocks: any[]): boolean => {
   if (!blocks || blocks.length === 0) return false;
   return blocks.some(b => {
     const bStart = timeToMinutes(b.start_time);
     const bEnd = timeToMinutes(b.end_time);
-    return slotStart >= bStart && slotEnd <= bEnd;
+    // Strict match with RPC: end_time must be strictly less than block end_time
+    // to satisfy the p_end_time::time < ab.end_time check in SQL
+    return slotStart >= bStart && slotEnd < bEnd;
   });
 };
 
@@ -170,12 +171,17 @@ export function BookingCenter() {
   const [leadsLoading, setLeadsLoading] = useState(false);
   const [leadsError, setLeadsError] = useState<string | null>(null);
   const [modalOpenCount, setModalOpenCount] = useState(0);
+  const [activeAppts, setActiveAppts] = useState<any[]>([]);
+  const [activeApptsLoading, setActiveApptsLoading] = useState(false);
   
   // Live API State
   const [liveAvailability, setLiveAvailability] = useState<any>(null);
   const [liveAppointments, setLiveAppointments] = useState<any[]>([]);
   const [apiLoading, setApiLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [leadsMap, setLeadsMap] = useState<Record<string, any>>({});
+  const [selectedBookedAppt, setSelectedBookedAppt] = useState<any | null>(null);
+  const requestId = useRef(0);
 
   // Fetch practice list via admin-api
   useEffect(() => {
@@ -224,8 +230,14 @@ export function BookingCenter() {
   // Fetch live data
   const refreshLiveData = useCallback(async () => {
     if (!selectedPractice) return;
+    
+    const currentReqId = ++requestId.current;
+    console.log("[BookingCenter] fetchAvailability", { reqId: currentReqId, selectedPractice, selectedDate });
+
     setApiLoading(true);
     setApiError(null);
+    setSelectedSlot(null);
+    setSelectedBookedAppt(null);
     
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -251,15 +263,42 @@ export function BookingCenter() {
       const availJson = await availRes.json();
       const apptsJson = await apptsRes.json();
 
-      setLiveAvailability(availJson.data);
-      setLiveAppointments(apptsJson.data?.appointments || []);
+      // Guard: only apply if this is the latest request
+      if (currentReqId !== requestId.current) {
+        console.warn("[BookingCenter] ignoring stale availability response", { reqId: currentReqId, latest: requestId.current });
+        return;
+      }
 
-      console.log(`booking-api availability blocks=${availJson.data?.blocks?.length || 0} exceptions=${availJson.data?.exceptions?.length || 0} tz=${availJson.data?.timezone} | appointments total=${apptsJson.data?.appointments?.length || 0}`);
+      const blocks = availJson.data?.blocks || [];
+      const exceptions = availJson.data?.exceptions || [];
+      console.log("[BookingCenter] fetchAvailability result", { reqId: currentReqId, blocks: blocks.length, exceptions: exceptions.length });
+
+      setLiveAvailability(availJson.data);
+      const fetchedAppointments = apptsJson.data?.appointments || [];
+      setLiveAppointments(fetchedAppointments);
+
+      // Extract lead info from joined results (provided by service-role backend)
+      const joinedLeadsMap: Record<string, any> = {};
+      fetchedAppointments.forEach((appt: any) => {
+        // The backend returns joined lead data under the 'lead' key
+        const leadData = appt.lead || appt.leads;
+        if (leadData && appt.lead_id) {
+          joinedLeadsMap[appt.lead_id] = leadData;
+        }
+      });
+
+      if (Object.keys(joinedLeadsMap).length > 0) {
+        setLeadsMap(prev => ({ ...prev, ...joinedLeadsMap }));
+      }
     } catch (err: any) {
-      console.error('BookingCenter Fetch Error:', err);
-      setApiError(err.message || 'Failed to fetch live data');
+      if (currentReqId === requestId.current) {
+        console.error('BookingCenter Fetch Error:', err);
+        setApiError(err.message || 'Failed to fetch live data');
+      }
     } finally {
-      setApiLoading(false);
+      if (currentReqId === requestId.current) {
+        setApiLoading(false);
+      }
     }
   }, [selectedPractice, selectedDate]);
 
@@ -273,45 +312,57 @@ export function BookingCenter() {
 
     let cancelled = false;
 
-    const fetchLeads = async () => {
+    const fetchData = async () => {
       try {
         setLeadsLoading(true);
+        setActiveApptsLoading(true);
         setLeadsError(null);
 
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
         const q = searchTerm ? `&q=${encodeURIComponent(searchTerm)}` : '';
-        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-api/admin/leads/search?practice_id=${selectedPractice}${q}`;
+        const baseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-api`;
+        const headers = { 'Authorization': `Bearer ${token}` };
+
+        const leadsUrl = `${baseUrl}/admin/leads/search?practice_id=${selectedPractice}${q}`;
+        const activeApptsUrl = `${baseUrl}/admin/appointments/active?practice_id=${selectedPractice}`;
         
-        console.log('[BookingCenter] fetching leads from:', url);
+        console.log('[BookingCenter] fetching leads and active appts for modal');
 
-        const res = await fetch(url, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const [leadsRes, activeRes] = await Promise.all([
+          fetch(leadsUrl, { headers }),
+          fetch(activeApptsUrl, { headers })
+        ]);
 
-        if (!res.ok) {
-          const errTxt = await res.text();
-          throw new Error(`Failed to fetch leads: ${res.status} ${errTxt}`);
+        if (!leadsRes.ok) {
+          const errTxt = await leadsRes.text();
+          throw new Error(`Failed to fetch leads: ${leadsRes.status} ${errTxt}`);
+        }
+        if (!activeRes.ok) {
+          const errTxt = await activeRes.text();
+          throw new Error(`Failed to fetch active appointments: ${activeRes.status} ${errTxt}`);
         }
 
-        const json = await res.json();
-        const leads = json.data || [];
-
-        console.debug('[BookingCenter] leads search ok', { count: leads.length, q: searchTerm });
+        const leadsJson = await leadsRes.json();
+        const activeJson = await activeRes.json();
 
         if (cancelled) return;
 
-        setLiveLeads(leads);
+        setLiveLeads(leadsJson.data || []);
+        setActiveAppts(activeJson.data || []);
       } catch (e: any) {
         if (cancelled) return;
         setLiveLeads([]);
-        setLeadsError(e?.message || 'Failed to load leads');
+        setLeadsError(e?.message || 'Failed to load data');
       } finally {
-        if (!cancelled) setLeadsLoading(false);
+        if (!cancelled) {
+          setLeadsLoading(false);
+          setActiveApptsLoading(false);
+        }
       }
     };
 
-    fetchLeads();
+    fetchData();
 
     return () => {
       cancelled = true;
@@ -325,6 +376,9 @@ export function BookingCenter() {
 
   // Form for new patient
   const [newPatient, setNewPatient] = useState({ first: '', last: '', phone: '', email: '' });
+  const [apptNotes, setApptNotes] = useState('');
+  const [bookingMode, setBookingMode] = useState<'select' | 'create'>('select');
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
 
   const slots = useMemo(() => {
     const s = [];
@@ -339,19 +393,30 @@ export function BookingCenter() {
     const tz = liveAvailability?.timezone || 'America/New_York';
     const dayOfWeek = getPracticeDayOfWeek(selectedDate, tz);
     const blocks = liveAvailability?.blocks || [];
-    const dayBlocks = blocks.filter((b: any) => b.day_of_week === dayOfWeek);
     
+    // Ensure we handle both string and number day_of_week from API
+    const dayBlocks = blocks.filter((b: any) => Number(b.day_of_week) === dayOfWeek);
+    
+    console.log("[BookingCenter] dayBlocks debug", {
+      selectedDate,
+      jsDay: dateStrToSafeDate(selectedDate).getDay(),
+      dbDay: dayOfWeek,
+      rawBlockDays: blocks.map((b: any) => b.day_of_week),
+      matched: dayBlocks.length
+    });
+
     return {
       tz,
       dayOfWeek,
       dayBlocks,
-      hasAvailability: dayBlocks.length > 0
+      hasAvailability: dayBlocks.length > 0,
+      totalBlocks: blocks.length
     };
   }, [liveAvailability, selectedDate]);
 
   // Derived map of booked slots from liveAppointments
   const bookedSlotsByMinute = useMemo(() => {
-    const map: Record<number, { name: string; isStart: boolean; isEnd: boolean }> = {};
+    const map: Record<number, { appt: any; name: string; info: string; isStart: boolean; isEnd: boolean }> = {};
     if (!liveAppointments || liveAppointments.length === 0) return map;
 
     liveAppointments.forEach(appt => {
@@ -368,13 +433,26 @@ export function BookingCenter() {
       
       if (endMin <= startMin) return;
 
-      const displayName = appt.lead_name || appt.patient_name || appt.name || 'Booked';
+      const lead = leadsMap[appt.lead_id];
+      let displayName = 'Patient';
+      if (lead) {
+        const full = `${lead.first_name ?? ''} ${lead.last_name ?? ''}`.trim();
+        if (full) displayName = full;
+        else if (lead.phone) displayName = lead.phone;
+        else if (lead.email) displayName = lead.email;
+      } else {
+        displayName = appt.lead_name || appt.patient_name || appt.name || 'Booked';
+      }
+
+      const secondaryInfo = lead ? (lead.email || lead.phone || '') : '';
 
       for (let m = startMin; m < endMin; m += SLOT_STEP) {
         // Only include if it fits in our grid view
         if (m >= START_MIN && m < END_MIN) {
           map[m] = { 
+            appt,
             name: displayName, 
+            info: secondaryInfo,
             isStart: m === startMin,
             isEnd: (m + SLOT_STEP >= endMin)
           };
@@ -383,14 +461,14 @@ export function BookingCenter() {
     });
 
     return map;
-  }, [liveAppointments, availabilityData.tz]);
+  }, [liveAppointments, availabilityData.tz, leadsMap]);
 
   const getSlotState = (m: number) => {
     // 1. Check if it's booked (Overrides everything else)
     if (bookedSlotsByMinute[m]) return 'booked';
 
     // 2. Check if it's in availability blocks
-    const enabled = isSlotEnabled(m, m + SLOT_STEP, availabilityData.dayBlocks);
+    const enabled = isSlotWithinAvailability(m, m + SLOT_STEP, availabilityData.dayBlocks);
     if (!enabled) return 'unavailable';
     
     // TODO: Apply exceptions (Phase B)
@@ -402,12 +480,16 @@ export function BookingCenter() {
     const state = getSlotState(m);
     if (state === 'available') {
       setSelectedSlot(m);
+      setSelectedBookedAppt(null);
+    } else if (state === 'booked') {
+      setSelectedBookedAppt(bookedSlotsByMinute[m].appt);
+      setSelectedSlot(null);
     }
   };
 
-  const handleConfirmBooking = async (lead: { id: string; name: string }) => {
+  const handleConfirmBooking = async (inputLead?: { id: string; name: string }) => {
     if (selectedSlot === null || !selectedPractice) return;
-
+    
     setApiLoading(true);
     setApiError(null);
 
@@ -418,21 +500,89 @@ export function BookingCenter() {
       const tz = liveAvailability?.timezone || 'America/New_York';
       const startTimestamp = buildTimestampWithOffset(selectedDate, selectedSlot, tz);
       const endTimestamp = buildTimestampWithOffset(selectedDate, selectedSlot + duration, tz);
-
       const createdBy = session.user?.id || session.user?.email || 'admin';
+      const token = session.access_token;
 
-      const { data, error } = await supabase.rpc('admin_create_appointment', {
+      let finalLeadId = inputLead?.id || selectedLeadId;
+      let finalLeadName = inputLead?.name || '';
+
+      // 1. If in 'create' mode, create the lead first
+      if (bookingMode === 'create') {
+        const baseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-api`;
+        const leadRes = await fetch(`${baseUrl}/admin/leads`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            first_name: newPatient.first,
+            last_name: newPatient.last,
+            phone: newPatient.phone,
+            email: newPatient.email,
+            practice_id: selectedPractice
+          })
+        });
+
+        if (!leadRes.ok) {
+          const errJson = await leadRes.json();
+          
+          // Handle duplicate lead conflict (409)
+          if (leadRes.status === 409) {
+            const existingId = errJson.lead_id || errJson.leadId || errJson.existing_lead_id || errJson.existingLeadId;
+            if (existingId) {
+              console.log('[BookingCenter] Lead already exists, auto-selecting:', existingId);
+              setBookingMode('select');
+              setSelectedLeadId(existingId);
+              setApiError(null);
+              
+              // Proceed with this existing lead ID
+              finalLeadId = existingId;
+              finalLeadName = `${newPatient.first} ${newPatient.last}`; 
+            } else {
+              throw new Error(errJson.error || 'Lead already exists');
+            }
+          } else {
+            throw new Error(errJson.error || 'Failed to create lead');
+          }
+        } else {
+          const leadJson = await leadRes.json();
+          finalLeadId = leadJson.data.id;
+          finalLeadName = `${newPatient.first} ${newPatient.last}`;
+        }
+      } else if (!finalLeadId && inputLead) {
+        finalLeadId = inputLead.id;
+        finalLeadName = inputLead.name;
+      } else if (finalLeadId && !finalLeadName) {
+        const lead = liveLeads.find(l => l.id === finalLeadId);
+        finalLeadName = lead ? `${lead.first_name} ${lead.last_name}` : 'Patient';
+      }
+
+      if (!finalLeadId) throw new Error('No patient selected or created');
+
+      // 2. Create the appointment
+      const { data, error } = await (supabase.rpc as any)('admin_create_appointment', {
         p_practice_id: selectedPractice,
-        p_lead_id: lead.id,
+        p_lead_id: finalLeadId,
         p_start_time: startTimestamp,
         p_end_time: endTimestamp,
         p_source: 'call_center',
-        p_created_by: createdBy
+        p_created_by: createdBy,
+        p_notes: apptNotes || null
       });
 
       if (error) {
         let msg = error.message || 'Failed to create appointment';
-        if (msg.includes('Time slot outside availability')) msg = 'Time slot outside availability';
+        if (msg.includes('Time slot outside availability')) {
+          msg = 'Time slot outside availability';
+          console.warn("[BookingCenter] slot rejected", { 
+            slotStart: selectedSlot, 
+            slotEnd: selectedSlot + duration, 
+            tz, 
+            selectedDate,
+            error: error.message 
+          });
+        }
         if (msg.includes('Time slot unavailable (overlap)')) msg = 'Time slot unavailable (overlap)';
         throw new Error(msg);
       }
@@ -441,11 +591,12 @@ export function BookingCenter() {
 
       setIsModalOpen(false);
       setSelectedSlot(null);
+      setSelectedLeadId(null);
       setNewPatient({ first: '', last: '', phone: '', email: '' });
+      setApptNotes('');
       setSearchQuery('');
-      setToastMessage(`Booking confirmed for ${lead.name}`);
+      setToastMessage(`Booking confirmed for ${finalLeadName}`);
       
-      // Trigger refresh of live data
       refreshLiveData();
     } catch (err: any) {
       console.error('Booking Error:', err);
@@ -454,6 +605,52 @@ export function BookingCenter() {
       setApiLoading(false);
     }
   };
+
+  const handleCancelAppointment = async (apptId: string) => {
+    if (!window.confirm('Are you sure you want to cancel this appointment?')) return;
+
+    setApiLoading(true);
+    setApiError(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('No active session');
+
+      const token = session.access_token;
+      const baseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-api`;
+      const headers = { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+
+      const res = await fetch(`${baseUrl}/admin/appointments/${apptId}/cancel`, {
+        method: 'POST',
+        headers
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json();
+        throw new Error(errJson.error || 'Failed to cancel appointment');
+      }
+
+      setToastMessage('Appointment canceled successfully');
+      setSelectedBookedAppt(null);
+      refreshLiveData();
+    } catch (err: any) {
+      console.error('Cancellation Error:', err);
+      setApiError(err.message || 'Failed to cancel appointment');
+    } finally {
+      setApiLoading(false);
+    }
+  };
+
+  const activeBookedLeadIds = useMemo(() => {
+    return new Set(
+      (activeAppts ?? [])
+        .map(a => a.lead_id)
+        .filter(Boolean)
+    );
+  }, [activeAppts]);
 
   const filteredLeads = useMemo(() => {
     if (searchTerm === '') return liveLeads.slice(0, 10);
@@ -465,6 +662,16 @@ export function BookingCenter() {
       return displayName.includes(search) || email.includes(search) || phone.includes(search);
     });
   }, [liveLeads, searchTerm]);
+
+  const eligibleLeads = useMemo(() => {
+    const list = filteredLeads.filter(l => !activeBookedLeadIds.has(l.id));
+    if (isModalOpen) {
+      console.log('[BookingCenter] activeAppts count', activeAppts.length);
+      console.log('[BookingCenter] activeBookedLeadIds', [...activeBookedLeadIds]);
+      console.log('[Admin BookingCenter] eligibleLeads', list.length);
+    }
+    return list;
+  }, [filteredLeads, activeBookedLeadIds, isModalOpen, activeAppts.length]);
 
   return (
     <div style={{ padding: '2rem', maxWidth: '1440px', margin: '0 auto', fontFamily: 'Inter, system-ui, sans-serif' }}>
@@ -539,10 +746,17 @@ export function BookingCenter() {
             </div>
           </div>
 
-          {!availabilityData.hasAvailability && !apiLoading && (
+          {!apiLoading && availabilityData.totalBlocks === 0 && (
             <div style={{ padding: '1rem 2rem', background: '#fffbeb', borderBottom: '1px solid #fef3c7', color: '#92400e', fontSize: '0.875rem', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <span>⚠️</span>
               No availability has been set for this practice yet. Add availability in the Provider Portal to enable booking times.
+            </div>
+          )}
+
+          {!apiLoading && availabilityData.totalBlocks > 0 && availabilityData.dayBlocks.length === 0 && (
+            <div style={{ padding: '1rem 2rem', background: '#fffbeb', borderBottom: '1px solid #fef3c7', color: '#92400e', fontSize: '0.875rem', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span>⚠️</span>
+              No availability for this day. Try a different date (or add availability for this day in the Provider Portal).
             </div>
           )}
           
@@ -552,7 +766,6 @@ export function BookingCenter() {
                 {slots.map(m => {
                   const state = getSlotState(m);
                   const isSelected = selectedSlot === m;
-                  const isHour = m % 60 === 0;
                   const isHalfHour = m % 60 !== 0;
                   const timeLabel = format12h(m);
                   const isHourBoundaryBelow = (m + SLOT_STEP) % 60 === 0;
@@ -601,13 +814,20 @@ export function BookingCenter() {
                             borderTop: bookedSlotsByMinute[m].isStart ? '1px solid #e2e8f0' : 'none',
                             borderBottom: bookedSlotsByMinute[m].isEnd ? '1px solid #e2e8f0' : 'none',
                             display: 'flex', alignItems: 'center', padding: '0 1.25rem', zIndex: 1,
-                            boxShadow: '0 1px 2px rgba(0,0,0,0.02)', borderLeft: '4px solid #94a3b8'
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.02)', borderLeft: '4px solid #94a3b8',
+                            cursor: 'pointer'
                           }}>
-                            {bookedSlotsByMinute[m].isStart && (
-                              <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                                <span style={{ fontSize: '1rem', opacity: 0.6 }}>👤</span> {bookedSlotsByMinute[m].name}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.125rem', overflow: 'hidden' }}>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.5rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {bookedSlotsByMinute[m].isStart && <span style={{ fontSize: '0.875rem', opacity: 0.6 }}>👤</span>}
+                                {bookedSlotsByMinute[m].name}
                               </span>
-                            )}
+                              {bookedSlotsByMinute[m].isStart && bookedSlotsByMinute[m].info && (
+                                <span style={{ fontSize: '0.625rem', color: '#64748b', marginLeft: '1.375rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {bookedSlotsByMinute[m].info}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         )}
                         
@@ -645,7 +865,82 @@ export function BookingCenter() {
 
         {/* Right: Context Panel */}
         <div style={{ position: 'sticky', top: '2rem' }}>
-          {!selectedSlot ? (
+          {selectedBookedAppt ? (
+            <div style={{ background: 'white', padding: '2rem', borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.12)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                <h3 style={{ margin: 0, fontSize: '0.8125rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Appointment Details</h3>
+                <button onClick={() => setSelectedBookedAppt(null)} style={{ background: '#f1f5f9', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1.25rem', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }} onMouseOver={e => e.currentTarget.style.background='#e2e8f0'}>×</button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem' }}>👤</div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 800, color: '#0f172a' }}>
+                      {leadsMap[selectedBookedAppt.lead_id]?.first_name} {leadsMap[selectedBookedAppt.lead_id]?.last_name}
+                    </h4>
+                    <span style={{ fontSize: '0.8125rem', color: '#64748b', fontWeight: 500 }}>{leadsMap[selectedBookedAppt.lead_id]?.email || leadsMap[selectedBookedAppt.lead_id]?.phone || 'Patient'}</span>
+                  </div>
+                </div>
+
+                <div style={{ background: '#f8fafc', padding: '1.25rem', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 800, letterSpacing: '0.05em', marginBottom: '0.75rem' }}>SCHEDULED FOR</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#1e293b', fontWeight: 700, fontSize: '0.9375rem' }}>
+                      📅 {new Date(selectedBookedAppt.start_time).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#0c4c54', fontWeight: 800, fontSize: '1rem' }}>
+                      ⏰ {new Date(selectedBookedAppt.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – {new Date(selectedBookedAppt.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 800, letterSpacing: '0.05em', marginBottom: '0.625rem' }}>STATUS</div>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: '#f0fdfa', color: '#0c4c54', padding: '0.35rem 0.75rem', borderRadius: '100px', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', border: '1px solid #ccfbf1' }}>
+                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#00bfa5' }} />
+                    {selectedBookedAppt.status}
+                  </div>
+                </div>
+
+                {selectedBookedAppt.notes && (
+                  <div>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 800, letterSpacing: '0.05em', marginBottom: '0.625rem' }}>NOTES</div>
+                    <div style={{ background: '#fffbeb', padding: '1rem', borderRadius: '12px', border: '1px solid #fef3c7', fontSize: '0.875rem', color: '#92400e', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                      {selectedBookedAppt.notes}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1rem' }}>
+                  <Link 
+                    to={`/admin/leads/${selectedBookedAppt.lead_id}`}
+                    style={{ 
+                      padding: '1rem', borderRadius: '12px', background: '#f8fafc', color: '#0c4c54', 
+                      fontWeight: 700, textDecoration: 'none', textAlign: 'center', fontSize: '0.9375rem', 
+                      border: '1px solid #e2e8f0', transition: 'all 0.2s' 
+                    }}
+                    onMouseOver={e => e.currentTarget.style.background = '#f1f5f9'}
+                    onMouseOut={e => e.currentTarget.style.background = '#f8fafc'}
+                  >
+                    View Lead Profile
+                  </Link>
+                  <button 
+                    onClick={() => handleCancelAppointment(selectedBookedAppt.id)}
+                    style={{ 
+                      padding: '1rem', borderRadius: '12px', background: '#fff1f2', color: '#be123c', 
+                      fontWeight: 700, border: '1px solid #fecdd3', cursor: 'pointer', fontSize: '0.9375rem',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseOver={e => e.currentTarget.style.background = '#ffe4e6'}
+                    onMouseOut={e => e.currentTarget.style.background = '#fff1f2'}
+                  >
+                    Cancel Appointment
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : !selectedSlot ? (
             <div style={{ background: 'white', padding: '3.5rem 2rem', borderRadius: '20px', border: '1px solid #e2e8f0', textAlign: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
               <div style={{ width: '72px', height: '72px', borderRadius: '20px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.75rem', border: '1px solid #f1f5f9', fontSize: '2.25rem' }}>
                 📅
@@ -737,6 +1032,9 @@ export function BookingCenter() {
                       setLeadsError(err.message || 'Unknown error fetching leads');
                     } finally {
                       setLeadsLoading(false);
+                      const jsDay = dateStrToSafeDate(selectedDate).getDay();
+                      const dbDay = toDbDayOfWeek(jsDay);
+                      console.log("[BookingCenter] day mapping", { selectedDate, jsDay, dbDay, tz: liveAvailability?.timezone || 'America/New_York' });
                       console.log('[BookingCenter] opening modal now');
                       setIsModalOpen(true);
                     }
@@ -805,128 +1103,162 @@ export function BookingCenter() {
                 </div>
               </div>
 
-              {/* Patient Selection */}
-              <div style={{ marginBottom: '3rem' }}>
-                <h4 style={{ fontSize: '0.75rem', color: '#1e293b', fontWeight: 800, letterSpacing: '0.075em', marginBottom: '1.25rem', textTransform: 'uppercase' }}>Search Existing Leads</h4>
-                <div style={{ position: 'relative' }}>
-                  <input 
-                    placeholder="Search by name, email, or phone number..." 
-                    value={searchTerm}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    style={{ width: '100%', padding: '1.125rem 1.5rem', borderRadius: '16px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none', fontSize: '1.0625rem', background: '#fcfdfe', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)', transition: 'all 0.2s' }}
-                    onFocus={e => e.currentTarget.style.borderColor = '#0c4c54'}
-                    onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
-                  />
-                  <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.5rem', fontFamily: 'monospace' }}>
-                    Search: "{searchTerm}" | liveLeads: {liveLeads.length} | filtered: {filteredLeads.length} | leadsLoading: {String(leadsLoading)} | leadsError: {leadsError ?? "none"} | modalOpens: {modalOpenCount}
+              {/* Patient Selection Toggle */}
+              <div style={{ display: 'flex', gap: '1rem', marginBottom: '2.5rem' }}>
+                <button 
+                  onClick={() => setBookingMode('select')}
+                  style={{
+                    flex: 1, padding: '1rem', borderRadius: '16px', border: '1px solid',
+                    fontSize: '0.9375rem', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
+                    background: bookingMode === 'select' ? '#0c4c54' : 'white',
+                    color: bookingMode === 'select' ? 'white' : '#64748b',
+                    borderColor: bookingMode === 'select' ? '#0c4c54' : '#e2e8f0',
+                    boxShadow: bookingMode === 'select' ? '0 8px 16px -4px rgba(12,76,84,0.2)' : 'none'
+                  }}
+                >
+                  Select Existing Lead
+                </button>
+                <button 
+                  onClick={() => setBookingMode('create')}
+                  style={{
+                    flex: 1, padding: '1rem', borderRadius: '16px', border: '1px solid',
+                    fontSize: '0.9375rem', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
+                    background: bookingMode === 'create' ? '#0c4c54' : 'white',
+                    color: bookingMode === 'create' ? 'white' : '#64748b',
+                    borderColor: bookingMode === 'create' ? '#0c4c54' : '#e2e8f0',
+                    boxShadow: bookingMode === 'create' ? '0 8px 16px -4px rgba(12,76,84,0.2)' : 'none'
+                  }}
+                >
+                  Create New Lead
+                </button>
+              </div>
+
+              {/* Patient Selection Content */}
+              {bookingMode === 'select' ? (
+                <div style={{ marginBottom: '2.5rem' }}>
+                  <h4 style={{ fontSize: '0.75rem', color: '#1e293b', fontWeight: 800, letterSpacing: '0.075em', marginBottom: '1.25rem', textTransform: 'uppercase' }}>Search Existing Leads</h4>
+                  <div style={{ position: 'relative' }}>
+                    <input 
+                      placeholder="Search by name, email, or phone number..." 
+                      value={searchTerm}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      style={{ width: '100%', padding: '1.125rem 1.5rem', borderRadius: '16px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none', fontSize: '1.0625rem', background: '#fcfdfe', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)', transition: 'all 0.2s' }}
+                      onFocus={e => e.currentTarget.style.borderColor = '#0c4c54'}
+                      onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
+                    />
+                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.5rem', fontFamily: 'monospace' }}>
+                      Search: "{searchTerm}" | liveLeads: {liveLeads.length} | filtered: {filteredLeads.length} | eligible: {eligibleLeads.length} | leadsLoading: {String(leadsLoading)} | leadsError: {leadsError ?? "none"} | modalOpens: {modalOpenCount}
+                    </div>
                   </div>
-                </div>
-                
-                <div style={{ marginTop: '1rem', border: '1px solid #e2e8f0', borderRadius: '20px', overflow: 'hidden', minHeight: '140px', maxHeight: '280px', overflowY: 'auto', background: '#f8fafc' }}>
-                  {leadsLoading ? (
-                    <div style={{ padding: '3.5rem', textAlign: 'center', fontSize: '0.9375rem', color: '#94a3b8', fontWeight: 500 }}>
-                      <span style={{ fontSize: '1.5rem', display: 'block', marginBottom: '0.5rem' }}>⏳</span>
-                      Loading leads...
-                    </div>
-                  ) : leadsError ? (
-                    <div style={{ padding: '2.5rem 2rem', textAlign: 'center', fontSize: '0.875rem', color: '#991b1b', background: '#fef2f2' }}>
-                      <span style={{ fontSize: '1.5rem', display: 'block', marginBottom: '0.5rem' }}>⚠️</span>
-                      <strong>Error: {leadsError}</strong>
-                      <p style={{ marginTop: '0.5rem', color: '#7f1d1d', fontSize: '0.75rem' }}>
-                        If this says permission denied / RLS, Admin Portal cannot read public.leads directly.
-                      </p>
-                    </div>
-                  ) : filteredLeads.length > 0 ? filteredLeads.map(l => {
-                    const displayName = `${l.first_name ?? ''} ${l.last_name ?? ''}`.trim() || '(Unnamed lead)';
-                    return (
-                      <div 
-                        key={l.id} 
-                        onClick={() => handleConfirmBooking({ id: l.id, name: displayName })}
-                        style={{ padding: '1.25rem 1.75rem', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', background: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s' }}
-                        onMouseOver={(e) => e.currentTarget.style.background = '#f0fdfa'}
-                        onMouseOut={(e) => e.currentTarget.style.background = 'white'}
-                      >
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: '1.0625rem', color: '#0f172a' }}>{displayName}</div>
-                          <div style={{ fontSize: '0.875rem', color: '#64748b', marginTop: '0.25rem' }}>{l.email ?? 'No email'} • {l.phone ?? 'No phone'}</div>
-                        </div>
-                        <button style={{ fontSize: '0.75rem', fontWeight: 800, color: '#0c4c54', background: '#e0f2f1', padding: '0.625rem 1.25rem', borderRadius: '100px', border: 'none', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={e => e.currentTarget.style.background='#b2dfdb'}>SELECT</button>
+                  
+                  <div style={{ marginTop: '1rem', border: '1px solid #e2e8f0', borderRadius: '20px', overflow: 'hidden', minHeight: '140px', maxHeight: '280px', overflowY: 'auto', background: '#f8fafc' }}>
+                    {leadsLoading || activeApptsLoading ? (
+                      <div style={{ padding: '3.5rem', textAlign: 'center', fontSize: '0.9375rem', color: '#94a3b8', fontWeight: 500 }}>
+                        <span style={{ fontSize: '1.5rem', display: 'block', marginBottom: '0.5rem' }}>⏳</span>
+                        Loading leads...
                       </div>
-                    );
-                  }) : (
-                    <div style={{ padding: '3.5rem', textAlign: 'center', fontSize: '0.9375rem', color: '#64748b', background: 'white' }}>
-                      <span style={{ fontSize: '1.5rem', display: 'block', marginBottom: '0.5rem' }}>📂</span>
-                      No leads found yet. Create a new patient below.
+                    ) : leadsError ? (
+                      <div style={{ padding: '2.5rem 2rem', textAlign: 'center', fontSize: '0.875rem', color: '#991b1b', background: '#fef2f2' }}>
+                        <span style={{ fontSize: '1.5rem', display: 'block', marginBottom: '0.5rem' }}>⚠️</span>
+                        <strong>Error: {leadsError}</strong>
+                        <p style={{ marginTop: '0.5rem', color: '#7f1d1d', fontSize: '0.75rem' }}>
+                          If this says permission denied / RLS, Admin Portal cannot read public.leads directly.
+                        </p>
+                      </div>
+                    ) : eligibleLeads.length > 0 ? eligibleLeads.map(l => {
+                      const displayName = `${l.first_name ?? ''} ${l.last_name ?? ''}`.trim() || '(Unnamed lead)';
+                      const isSelected = selectedLeadId === l.id;
+                      return (
+                        <div 
+                          key={l.id} 
+                          onClick={() => setSelectedLeadId(isSelected ? null : l.id)}
+                          style={{ padding: '1.25rem 1.75rem', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', background: isSelected ? '#f0fdfa' : 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s' }}
+                          onMouseOver={(e) => { if(!isSelected) e.currentTarget.style.background = '#f8fafc' }}
+                          onMouseOut={(e) => { if(!isSelected) e.currentTarget.style.background = 'white' }}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '1.0625rem', color: '#0f172a' }}>{displayName}</div>
+                            <div style={{ fontSize: '0.875rem', color: '#64748b', marginTop: '0.25rem' }}>{l.email ?? 'No email'} • {l.phone ?? 'No phone'}</div>
+                          </div>
+                          <button style={{ fontSize: '0.75rem', fontWeight: 800, color: isSelected ? 'white' : '#0c4c54', background: isSelected ? '#00bfa5' : '#e0f2f1', padding: '0.625rem 1.25rem', borderRadius: '100px', border: 'none', cursor: 'pointer', transition: 'all 0.2s' }}>{isSelected ? 'SELECTED' : 'SELECT'}</button>
+                        </div>
+                      );
+                    }) : (
+                      <div style={{ padding: '3.5rem', textAlign: 'center', fontSize: '0.9375rem', color: '#64748b', background: 'white' }}>
+                        <span style={{ fontSize: '1.5rem', display: 'block', marginBottom: '0.5rem' }}>📂</span>
+                        {filteredLeads.length > 0 && eligibleLeads.length === 0 
+                          ? "No eligible leads to book (all leads already have active appointments)."
+                          : "No leads found yet. Create a new patient below."}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ marginBottom: '2.5rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.75rem' }}>
+                    <div className="form-group">
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>First Name *</label>
+                      <input 
+                        placeholder="Michael"
+                        value={newPatient.first} 
+                        onChange={e => setNewPatient({...newPatient, first: e.target.value})}
+                        style={{ width: '100%', padding: '1rem 1.25rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none', fontSize: '1rem', transition: 'all 0.2s' }} 
+                        onFocus={e => e.currentTarget.style.borderColor = '#0c4c54'}
+                        onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
+                      />
                     </div>
-                  )}
+                    <div className="form-group">
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Last Name *</label>
+                      <input 
+                        placeholder="Jordan"
+                        value={newPatient.last} 
+                        onChange={e => setNewPatient({...newPatient, last: e.target.value})}
+                        style={{ width: '100%', padding: '1rem 1.25rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none', fontSize: '1rem', transition: 'all 0.2s' }} 
+                        onFocus={e => e.currentTarget.style.borderColor = '#0c4c54'}
+                        onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Phone Number *</label>
+                      <input 
+                        placeholder="(555) 000-0000"
+                        value={newPatient.phone} 
+                        onChange={e => setNewPatient({...newPatient, phone: e.target.value})}
+                        style={{ width: '100%', padding: '1rem 1.25rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none', fontSize: '1rem', transition: 'all 0.2s' }} 
+                        onFocus={e => e.currentTarget.style.borderColor = '#0c4c54'}
+                        onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Email Address (Optional)</label>
+                      <input 
+                        placeholder="patient@example.com"
+                        value={newPatient.email} 
+                        onChange={e => setNewPatient({...newPatient, email: e.target.value})}
+                        style={{ width: '100%', padding: '1rem 1.25rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none', fontSize: '1rem', transition: 'all 0.2s' }} 
+                        onFocus={e => e.currentTarget.style.borderColor = '#0c4c54'}
+                        onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f0f9ff', borderRadius: '12px', border: '1px solid #e0f2fe', fontSize: '0.8125rem', color: '#0369a1', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <span>💡</span>
+                    A new lead record will be created for this practice upon confirmation.
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', margin: '3.5rem 0' }}>
-                <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }} />
-                <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 800, letterSpacing: '0.15em' }}>NEW PATIENT REGISTRATION</span>
-                <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }} />
-              </div>
-
-              {/* New Patient Form */}
-              <div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.75rem' }}>
-                  <div className="form-group">
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>First Name</label>
-                    <input 
-                      placeholder="Michael"
-                      value={newPatient.first} 
-                      onChange={e => setNewPatient({...newPatient, first: e.target.value})}
-                      style={{ width: '100%', padding: '1rem 1.25rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none', fontSize: '1rem', transition: 'all 0.2s' }} 
-                      onFocus={e => e.currentTarget.style.borderColor = '#0c4c54'}
-                      onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Last Name</label>
-                    <input 
-                      placeholder="Jordan"
-                      value={newPatient.last} 
-                      onChange={e => setNewPatient({...newPatient, last: e.target.value})}
-                      style={{ width: '100%', padding: '1rem 1.25rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none', fontSize: '1rem', transition: 'all 0.2s' }} 
-                      onFocus={e => e.currentTarget.style.borderColor = '#0c4c54'}
-                      onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Phone Number</label>
-                    <input 
-                      placeholder="(555) 000-0000"
-                      value={newPatient.phone} 
-                      onChange={e => setNewPatient({...newPatient, phone: e.target.value})}
-                      style={{ width: '100%', padding: '1rem 1.25rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none', fontSize: '1rem', transition: 'all 0.2s' }} 
-                      onFocus={e => e.currentTarget.style.borderColor = '#0c4c54'}
-                      onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Email Address</label>
-                    <input 
-                      placeholder="patient@example.com"
-                      value={newPatient.email} 
-                      onChange={e => setNewPatient({...newPatient, email: e.target.value})}
-                      style={{ width: '100%', padding: '1rem 1.25rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none', fontSize: '1rem', transition: 'all 0.2s' }} 
-                      onFocus={e => e.currentTarget.style.borderColor = '#0c4c54'}
-                      onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
-                    />
-                  </div>
-                </div>
-                {!newPatient.first || !newPatient.last ? (
-                  <p style={{ margin: '1.25rem 0 0 0', fontSize: '0.8125rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ fontSize: '1rem' }}>⚠️</span> First and last name required to confirm
-                  </p>
-                ) : null}
-                <div style={{ marginTop: '2rem', display: 'flex', alignItems: 'center', gap: '1rem', padding: '1.25rem 1.5rem', background: '#f0f9ff', borderRadius: '16px', border: '1px solid #e0f2fe' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#bae6fd', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0369a1', fontSize: '1rem' }}>💡</div>
-                  <div>
-                    <p style={{ margin: 0, fontSize: '0.875rem', color: '#0369a1', fontWeight: 600 }}>A new patient lead record will be created automatically upon confirmation.</p>
-                  </div>
-                </div>
+              {/* Appointment Notes */}
+              <div style={{ marginBottom: '1rem' }}>
+                <h4 style={{ fontSize: '0.75rem', color: '#1e293b', fontWeight: 800, letterSpacing: '0.075em', marginBottom: '1.25rem', textTransform: 'uppercase' }}>Appointment Notes (Optional)</h4>
+                <textarea 
+                  placeholder="Add any internal notes, special requests, or instructions for this appointment..."
+                  value={apptNotes}
+                  onChange={(e) => setApptNotes(e.target.value)}
+                  style={{ width: '100%', padding: '1.25rem', borderRadius: '16px', border: '1px solid #e2e8f0', minHeight: '100px', boxSizing: 'border-box', outline: 'none', fontSize: '1rem', background: '#fcfdfe', transition: 'all 0.2s', resize: 'vertical' }}
+                  onFocus={e => e.currentTarget.style.borderColor = '#0c4c54'}
+                  onBlur={e => e.currentTarget.style.borderColor = '#e2e8f0'}
+                />
               </div>
             </div>
 
@@ -939,20 +1271,29 @@ export function BookingCenter() {
               >
                 Cancel
               </button>
-                     <button 
-                       disabled={true} // Disabled for now per requirements
-                       onClick={() => {}} // handleConfirmBooking not supported for new patients yet
-                       style={{ 
-                         padding: '1rem 2.5rem', borderRadius: '14px', border: 'none', 
-                         background: '#f1f5f9', 
-                         color: '#cbd5e1', 
-                         cursor: 'not-allowed', 
-                         fontWeight: 800, fontSize: '1.0625rem', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                         boxShadow: 'none'
-                       }}
-                     >
-                       {apiLoading ? 'Creating...' : 'Confirm Booking'}
-                     </button>
+              {(() => {
+                const isNewValid = newPatient.first && newPatient.last && newPatient.phone;
+                const canConfirm = apiLoading ? false : (bookingMode === 'select' ? !!selectedLeadId : isNewValid);
+                
+                return (
+                  <button 
+                    onClick={() => handleConfirmBooking()}
+                    disabled={!canConfirm}
+                    style={{ 
+                      padding: '1rem 2.5rem', borderRadius: '14px', border: 'none', 
+                      background: canConfirm ? '#0c4c54' : '#f1f5f9', 
+                      color: canConfirm ? 'white' : '#cbd5e1', 
+                      cursor: canConfirm ? 'pointer' : 'not-allowed', 
+                      fontWeight: 800, fontSize: '1.0625rem', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                      boxShadow: canConfirm ? '0 8px 20px -4px rgba(12,76,84,0.3)' : 'none'
+                    }}
+                    onMouseOver={(e) => { if(canConfirm) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 24px -4px rgba(12,76,84,0.4)'; } }}
+                    onMouseOut={(e) => { if(canConfirm) { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 8px 20px -4px rgba(12,76,84,0.3)'; } }}
+                  >
+                    {apiLoading ? 'Processing...' : 'Confirm Booking'}
+                  </button>
+                );
+              })()}
             </div>
           </div>
         </div>
