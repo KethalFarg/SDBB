@@ -1,3 +1,5 @@
+drop function if exists public.admin_create_appointment(uuid, uuid, timestamptz, timestamptz, text, text);
+
 create or replace function public.admin_create_appointment(
   p_practice_id uuid,
   p_lead_id uuid,
@@ -73,4 +75,3 @@ begin
   return v_appt;
 end;
 $$;
-
