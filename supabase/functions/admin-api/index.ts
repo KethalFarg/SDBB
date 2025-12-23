@@ -6,9 +6,10 @@ import { requireAdminAuth } from "../_shared/admin-auth.ts"
 import { maybeSyncLeadToGHL } from "../_shared/ghl.ts"
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+};
 
 async function linkUserToPractice(supabase: any, adminUserId: string, user_id: string, practice_id: string, role?: string) {
   if (!user_id || !practice_id) {
