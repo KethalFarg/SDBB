@@ -26,7 +26,7 @@ begin
   execute 'alter table public.practices enable row level security';
   execute 'alter table public.admin_users enable row level security';
 
-  -- Drop existing policies if they exist
+  -- Drop existing policies if they exist (idempotent)
   execute 'drop policy if exists admin_practices_select on public.practices';
   execute 'drop policy if exists admin_practices_insert on public.practices';
   execute 'drop policy if exists admin_practices_update on public.practices';
@@ -79,9 +79,9 @@ begin
         where au.%I = auth.uid()
       )
     );
-  $sql$, admin_uid_col);
+  $sql$, admin_uid_col, admin_uid_col);
 
-  -- Admin can read their own admin_users row
+  -- Allow an admin to read their own admin_users row (helps Admin Portal "is admin" checks)
   execute format($sql$
     create policy admin_admin_users_select_self
     on public.admin_users
