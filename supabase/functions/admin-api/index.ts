@@ -19,7 +19,7 @@ async function linkUserToPractice(supabase: any, adminUserId: string, user_id: s
   // Check if already exists
   const { data: existing, error: checkError } = await supabase
     .from('practice_users')
-    .select('practice_id,user_id,role')
+    .select('practice_id,user_id,role,created_at')
     .eq('user_id', user_id)
     .maybeSingle();
 
@@ -52,7 +52,7 @@ async function linkUserToPractice(supabase: any, adminUserId: string, user_id: s
       practice_id,
       role: role || 'practice_user'
     })
-    .select('practice_id,user_id,role')
+    .select('practice_id,user_id,role,created_at')
     .single();
 
   if (insertError) throw insertError;
@@ -220,7 +220,7 @@ serve(async (req) => {
       const practice_id = url.searchParams.get('practice_id');
       const q = url.searchParams.get('q');
       if (!practice_id) return new Response(JSON.stringify({ error: 'practice_id is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      let query = supabase.from('leads').select('*').eq('practice_id', practice_id).order('created_at', { ascending: false }).limit(25);
+      let query = supabase.from('leads').select('id, first_name, last_name, email, phone, practice_id, created_at').eq('practice_id', practice_id).order('created_at', { ascending: false }).limit(25);
       if (q) {
         const pattern = `%${q.trim()}%`;
         query = query.or(`first_name.ilike.${pattern},last_name.ilike.${pattern},email.ilike.${pattern},phone.ilike.${pattern}`);
@@ -270,7 +270,7 @@ serve(async (req) => {
           practice_id,
           source: 'manual'
         })
-        .select()
+        .select('id, first_name, last_name, phone, email, practice_id, source, created_at')
         .single();
         
       if (error) throw error;
@@ -280,7 +280,7 @@ serve(async (req) => {
     // GET /admin/practices
     if (req.method === 'GET' && path.includes('/admin/practices')) {
       console.log('[admin-api] ROUTE', 'admin/practices (GET)')
-      const { data, error } = await supabase.from('practices').select('*').order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('practices').select('id, name, status, created_at, booking_settings, timezone, lat, lng, radius_miles').order('created_at', { ascending: false });
       if (error) throw error;
       return new Response(JSON.stringify({ data }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
@@ -289,7 +289,7 @@ serve(async (req) => {
     if (req.method === 'POST' && path.includes('/admin/practices')) {
       console.log('[admin-api] ROUTE', 'admin/practices (POST)')
       const payload = await req.json();
-      const { data, error } = await supabase.from('practices').insert(payload).select().single();
+      const { data, error } = await supabase.from('practices').insert(payload).select('id, name, status, created_at, booking_settings, timezone, lat, lng, radius_miles').single();
       if (error) throw error;
       return new Response(JSON.stringify(data), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 201 });
     }
@@ -324,7 +324,7 @@ serve(async (req) => {
       const q = url.searchParams.get('q');
       const limit = Math.min(Number(url.searchParams.get('limit') ?? '25'), 100);
       const offset = Number(url.searchParams.get('offset') ?? '0');
-      let query = supabase.from('leads').select('*, practices(name)').order('created_at', { ascending: false }).range(offset, offset + limit - 1);
+      let query = supabase.from('leads').select('id, first_name, last_name, email, phone, zip, practice_id, created_at, routing_outcome, practices(name)').order('created_at', { ascending: false }).range(offset, offset + limit - 1);
       if (q) {
         const pattern = `%${q.trim()}%`;
         query = query.or(`zip.ilike.${pattern},email.ilike.${pattern},phone.ilike.${pattern},id.eq.${q.trim()}`);
@@ -366,7 +366,7 @@ serve(async (req) => {
     // GET /designation_review
     if (req.method === 'GET' && path.includes('/designation_review')) {
       console.log('[admin-api] ROUTE', 'designation_review (GET)')
-      const { data, error } = await supabase.from('designation_review').select('*, leads!inner(*)').is('resolved_at', null).order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('designation_review').select('id, lead_id, practice_id, created_at, resolved_at, leads!inner(id, zip, created_at)').is('resolved_at', null).order('created_at', { ascending: false });
       if (error) throw error;
       const mapped = (data || []).map((row: any) => ({
         ...row,
@@ -401,7 +401,7 @@ serve(async (req) => {
       console.log('[admin-api] ROUTE', 'admin/practices/:id (PATCH)')
       const practiceId = patchPracticeMatch[1];
       const payload = await req.json();
-      const { data, error } = await supabase.from('practices').update(payload).eq('id', practiceId).select().single();
+      const { data, error } = await supabase.from('practices').update(payload).eq('id', practiceId).select('id, name, status, created_at, booking_settings, timezone, lat, lng, radius_miles').single();
       if (error) throw error;
       return new Response(JSON.stringify(data), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
@@ -416,7 +416,7 @@ serve(async (req) => {
         // Skip this handler and let routing continue
       } else {
         console.log('[admin-api] ROUTE', 'admin/leads/:id')
-        const { data: lead, error } = await supabase.from('leads').select('*, practices(name)').eq('id', leadId).single();
+        const { data: lead, error } = await supabase.from('leads').select('id, first_name, last_name, email, phone, zip, practice_id, created_at, routing_outcome, practices(name)').eq('id', leadId).single();
         if (error || !lead) return new Response(JSON.stringify({ error: 'Lead not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         return new Response(JSON.stringify({ data: { ...lead, practice_name: (lead as any).practices?.name } }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
@@ -448,7 +448,7 @@ serve(async (req) => {
     if (req.method === 'GET' && practiceUsersMatch) {
       console.log('[admin-api] ROUTE', 'admin/practices/:id/users (GET)')
       const practiceId = practiceUsersMatch[1];
-      const { data: practiceUsers, error } = await supabase.from('practice_users').select('*').eq('practice_id', practiceId);
+      const { data: practiceUsers, error } = await supabase.from('practice_users').select('practice_id,user_id,role,created_at').eq('practice_id', practiceId);
       if (error) throw error;
       const usersWithEmails = await Promise.all((practiceUsers || []).map(async (pu: any) => {
         const { data: { user } } = await supabase.auth.admin.getUserById(pu.user_id);
@@ -497,7 +497,7 @@ serve(async (req) => {
                 .from('appointments')
                 .update({ status: 'canceled' })
                 .eq('id', apptId)
-                .select()
+                .select('id, status, practice_id, lead_id, start_time, end_time')
                 .single();
 
               if (error) throw error;
