@@ -278,7 +278,7 @@ serve(async (req) => {
     }
 
     // GET /admin/practices
-    if (req.method === 'GET' && path.includes('/admin/practices')) {
+    if (req.method === 'GET' && (p === '/admin/practices' || p === '/admin/practices/')) {
       console.log('[admin-api] ROUTE', 'admin/practices (GET)')
       const { data, error } = await supabase.from('practices').select('id, name, status, created_at, booking_settings, timezone, lat, lng, radius_miles').order('created_at', { ascending: false });
       if (error) throw error;
@@ -286,7 +286,7 @@ serve(async (req) => {
     }
 
     // POST /admin/practices
-    if (req.method === 'POST' && path.includes('/admin/practices')) {
+    if (req.method === 'POST' && (p === '/admin/practices' || p === '/admin/practices/')) {
       console.log('[admin-api] ROUTE', 'admin/practices (POST)')
       const payload = await req.json();
       const { data, error } = await supabase.from('practices').insert(payload).select('id, name, status, created_at, booking_settings, timezone, lat, lng, radius_miles').single();
