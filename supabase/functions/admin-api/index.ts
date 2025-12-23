@@ -19,7 +19,7 @@ async function linkUserToPractice(supabase: any, adminUserId: string, user_id: s
   // Check if already exists
   const { data: existing, error: checkError } = await supabase
     .from('practice_users')
-    .select('*')
+    .select('practice_id,user_id,role')
     .eq('user_id', user_id)
     .maybeSingle();
 
@@ -52,7 +52,7 @@ async function linkUserToPractice(supabase: any, adminUserId: string, user_id: s
       practice_id,
       role: role || 'practice_user'
     })
-    .select()
+    .select('practice_id,user_id,role')
     .single();
 
   if (insertError) throw insertError;
