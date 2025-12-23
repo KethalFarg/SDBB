@@ -50,11 +50,14 @@ export function PracticeAccess() {
       setPractice(found);
 
       // 2. Fetch Assigned Users
-      const uRes = await fetch(`${API_BASE}/admin/practices/${practiceId}/users`, {
-        headers: { 'Authorization': `Bearer ${session?.access_token}` }
-      });
-      const uJson = await uRes.json();
-      setUsers(uJson.data || []);
+      const { data: userData, error: userError } = await supabase
+        .from('practice_users_with_email')
+        .select('practice_id,user_id,role,created_at,email')
+        .eq('practice_id', practiceId)
+        .order('created_at', { ascending: false });
+
+      if (userError) throw userError;
+      setUsers(userData || []);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -219,7 +222,9 @@ export function PracticeAccess() {
                         transition: 'background-color 0.5s ease'
                       }}
                     >
-                      <td style={{ padding: '0.75rem 0.5rem', fontWeight: isHighlighted ? 'bold' : 'normal' }}>{u.email}</td>
+                      <td style={{ padding: '0.75rem 0.5rem', fontWeight: isHighlighted ? 'bold' : 'normal' }}>
+                        {u.email || u.user_id}
+                      </td>
                       <td style={{ padding: '0.75rem 0.5rem' }}>
                         <span style={{ background: '#e7f5ff', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.8rem' }}>
                           {u.role}
