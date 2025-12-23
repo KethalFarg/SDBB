@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 type ReviewItem = {
   id: string;
   lead_id: string;
+  assigned_practice_id?: string | null;
   reason_code?: string;
   reason?: string;
   created_at?: string;
@@ -91,12 +92,17 @@ export function DesignationReview() {
       setReviews(normalizedReviews);
       setPractices(normalizedPractices);
 
-      // Prefill row notes
+      // Prefill row notes and selected practices
       const newNotes: Record<string, string> = {};
+      const newSelectedPractices: Record<string, string> = {};
       normalizedReviews.forEach((r: ReviewItem) => {
         newNotes[r.id] = r.notes || '';
+        if (r.assigned_practice_id) {
+          newSelectedPractices[r.id] = r.assigned_practice_id;
+        }
       });
       setNotesByReviewId(newNotes);
+      setSelectedPracticeByReviewId(newSelectedPractices);
     } catch (err: any) {
       setError(err.message || 'Error loading data');
     } finally {

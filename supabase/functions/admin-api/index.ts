@@ -366,7 +366,7 @@ serve(async (req) => {
     // GET /designation_review
     if (req.method === 'GET' && path.includes('/designation_review')) {
       console.log('[admin-api] ROUTE', 'designation_review (GET)')
-      const { data, error } = await supabase.from('designation_review').select('id, lead_id, practice_id, created_at, resolved_at, leads!inner(id, zip, created_at)').is('resolved_at', null).order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('designation_review').select('id, lead_id, assigned_practice_id, reason_code, notes, created_at, resolved_at, leads!inner(id, zip, created_at)').is('resolved_at', null).order('created_at', { ascending: false });
       if (error) throw error;
       const mapped = (data || []).map((row: any) => ({
         ...row,
