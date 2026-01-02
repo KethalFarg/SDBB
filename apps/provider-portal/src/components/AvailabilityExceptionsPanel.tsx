@@ -5,7 +5,7 @@ import { DataTable } from './DataTable';
 interface AvailabilityException {
   id: string;
   practice_id: string;
-  exception_date: string;
+  date: string;
   start_time: string | null;
   end_time: string | null;
   is_available: boolean;
@@ -62,9 +62,9 @@ export function AvailabilityExceptionsPanel({ practiceId }: Props) {
         .from('availability_exceptions')
         .select('*')
         .eq('practice_id', practiceId)
-        .gte('exception_date', today)
-        .lte('exception_date', endRange)
-        .order('exception_date', { ascending: true })
+        .gte('date', today)
+        .lte('date', endRange)
+        .order('date', { ascending: true })
         .order('start_time', { ascending: true, nullsFirst: true });
 
       if (fetchErr) throw fetchErr;
@@ -109,7 +109,7 @@ export function AvailabilityExceptionsPanel({ practiceId }: Props) {
         .from('availability_exceptions')
         .insert({
           practice_id: practiceId,
-          exception_date: date,
+          date: date,
           start_time: startTime24,
           end_time: endTime24,
           is_available: false, // It's a closure
@@ -304,7 +304,7 @@ export function AvailabilityExceptionsPanel({ practiceId }: Props) {
         >
           {exceptions.map(ex => (
             <tr key={ex.id}>
-              <td style={{ fontWeight: 600 }}>{formatDate(ex.exception_date)}</td>
+              <td style={{ fontWeight: 600 }}>{formatDate(ex.date)}</td>
               <td>
                 {(!ex.start_time || !ex.end_time) ? (
                   <span className="status-pill status-neutral">All day</span>
