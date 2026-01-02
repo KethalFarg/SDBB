@@ -135,10 +135,11 @@ serve(async (req) => {
       try { supabase = getAuthClient(req); } catch(e) { return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }); }
 
       const body = await req.json();
-      const { lead_id, start_time, end_time, source } = body;
+      // Ignore incoming end_time, we will calculate it.
+      const { lead_id, start_time, source } = body;
 
-      if (!lead_id || !start_time || !end_time) {
-         return new Response(JSON.stringify({ error: 'Missing required fields: lead_id, start_time, end_time' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      if (!lead_id || !start_time) {
+         return new Response(JSON.stringify({ error: 'Missing required fields: lead_id, start_time' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
       // 1. Get Practice Context
@@ -159,47 +160,44 @@ serve(async (req) => {
          return new Response(JSON.stringify({ error: 'Lead belongs to another practice' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      // 3. Overlap Check
-      const { data: overlaps, error: overlapError } = await supabase
-          .from('appointments')
-          .select('id')
-          .eq('practice_id', practiceId)
-          .neq('status', 'canceled')
-          .lt('start_time', end_time)
-          .gt('end_time', start_time);
+      // 3. Enforce Duration & Create Appointment
+      try {
+        // TODO: Support variable durations in the future (e.g., via practice settings).
+        // Currently hardcoded to 60 minutes per requirement.
+        const DURATION_MINUTES = 60;
+        
+        const startDt = new Date(start_time);
+        const endDt = new Date(startDt.getTime() + DURATION_MINUTES * 60000);
+        const calculatedEndTime = endDt.toISOString();
 
-      if (overlapError) {
-         return new Response(JSON.stringify({ error: overlapError.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        // Use the admin RPC to handle atomic availability checks, overlap prevention, and insertion.
+        // This ensures the slot falls within a valid availability block and doesn't overlap existing bookings.
+        const { data: appointment, error: rpcError } = await supabase.rpc('admin_create_appointment', {
+          p_practice_id: practiceId,
+          p_lead_id: lead_id,
+          p_start_time: start_time,
+          p_end_time: calculatedEndTime,
+          p_source: source || 'call_center',
+          p_created_by: userId,
+          p_notes: null
+        });
+
+        if (rpcError) {
+          // Translate database errors to user-friendly messages
+          let msg = rpcError.message;
+          if (msg.includes('Time slot outside availability')) msg = 'Selected time is outside of practice availability.';
+          if (msg.includes('Time slot unavailable (overlap)')) msg = 'This time slot is already booked.';
+          throw new Error(msg);
+        }
+
+        // 4. Trigger Post-Booking Workflows
+        await triggerGhlSync('appointment', appointment.id);
+
+        return new Response(JSON.stringify(appointment), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 201 });
+
+      } catch (err: any) {
+        return new Response(JSON.stringify({ error: err.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
-
-      if (overlaps && overlaps.length > 0) {
-         return new Response(JSON.stringify({ error: 'Appointment overlaps with existing booking' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      // 4. Insert Appointment
-      const { data: appointment, error: insertError } = await supabase
-        .from('appointments')
-        .insert({
-          lead_id,
-          practice_id: practiceId,
-          start_time,
-          end_time,
-          status: 'scheduled',
-          sales_outcome: 'pending',
-          source: source || 'call_center',
-          created_by: userId
-        })
-        .select()
-        .single();
-
-      if (insertError) {
-        return new Response(JSON.stringify({ error: insertError.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      // GOAL B: Trigger GHL Sync
-      await triggerGhlSync('appointment', appointment.id);
-
-      return new Response(JSON.stringify(appointment), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 201 });
     }
 
     // GET /practices/:id/availability?date=YYYY-MM-DD
