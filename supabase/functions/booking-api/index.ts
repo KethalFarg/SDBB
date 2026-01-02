@@ -225,7 +225,7 @@ serve(async (req) => {
 
         const [blocksRes, exceptionsRes] = await Promise.all([
           supabaseAdmin.from('availability_blocks').select('*').eq('practice_id', practiceId).eq('day_of_week', dayOfWeek).order('start_time'),
-          supabase.from('availability_exceptions').select('*').eq('practice_id', practiceId).eq('exception_date', date).order('start_time', { nullsFirst: true })
+          supabase.from('availability_exceptions').select('*').eq('practice_id', practiceId).eq('date', date).order('date', { ascending: true }).order('start_time', { ascending: true, nullsFirst: true })
         ]);
 
         if (blocksRes.error) throw blocksRes.error;
