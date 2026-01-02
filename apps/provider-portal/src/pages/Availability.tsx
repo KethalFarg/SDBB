@@ -53,10 +53,18 @@ const formatTimeLabel = (minutes: number, is12h: boolean): string => {
   return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
 };
 
+// Helper: Convert 12h components to 24h string "HH:MM"
+const to24h = (hour: string, minute: string, ampm: string): string => {
+  let h = parseInt(hour, 10);
+  if (ampm === 'PM' && h !== 12) h += 12;
+  if (ampm === 'AM' && h === 12) h = 0;
+  return `${h.toString().padStart(2, '0')}:${minute}`;
+};
+
 // Helper: Build slots for the grid (7 AM to 7 PM)
 const START_MIN = 7 * 60; // 7:00 AM
 const END_MIN = 19 * 60; // 7:00 PM
-const SLOT_STEP = 30; // 30 minutes
+const SLOT_STEP = 15; // 15 minutes
 
 export function Availability() {
   const { session } = useSession();
@@ -79,10 +87,17 @@ export function Availability() {
   // Advanced form state
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [dayOfWeek, setDayOfWeek] = useState(1);
-  const [startTime, setStartTime] = useState('09:00');
-  const [endTime, setEndTime] = useState('17:00');
+  const [startHour, setStartHour] = useState('9');
+  const [startMin, setStartMin] = useState('00');
+  const [startAmpm, setStartAmpm] = useState('AM');
+  const [endHour, setEndHour] = useState('5');
+  const [endMin, setEndMin] = useState('00');
+  const [endAmpm, setEndAmpm] = useState('PM');
   const [type, setType] = useState('new_patient');
   const [submitting, setSubmitting] = useState(false);
+
+  const hours = Array.from({ length: 12 }, (_, i) => (i + 1).toString());
+  const minutesOptions = ['00', '15', '30', '45'];
 
   useEffect(() => {
     localStorage.setItem('sd_pref_12h', String(use12h));
@@ -243,6 +258,9 @@ export function Availability() {
     e.preventDefault();
     if (!practiceId) return;
     
+    const startTime = to24h(startHour, startMin, startAmpm);
+    const endTime = to24h(endHour, endMin, endAmpm);
+
     if (startTime >= endTime) {
       alert('End time must be after start time.');
       return;
@@ -272,8 +290,12 @@ export function Availability() {
         });
 
       if (error) throw error;
-      setStartTime('09:00');
-      setEndTime('17:00');
+      setStartHour('9');
+      setStartMin('00');
+      setStartAmpm('AM');
+      setEndHour('5');
+      setEndMin('00');
+      setEndAmpm('PM');
       await fetchBlocks();
     } catch (err: any) {
       alert(err.message || 'Failed to add block.');
@@ -402,7 +424,7 @@ export function Availability() {
                         onClick={() => toggleSlot(dayIdx, m)}
                         style={{ 
                           padding: 0, 
-                          height: '40px',
+                          height: '28px',
                           borderBottom: '1px solid var(--color-border)', 
                           borderRight: '1px solid var(--color-border)',
                           backgroundColor: isAvailable ? 'var(--color-primary-light)' : 'transparent',
@@ -457,11 +479,33 @@ export function Availability() {
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label>Start Time</label>
-                  <input type="time" className="form-control" value={startTime} onChange={e => setStartTime(e.target.value)} disabled={submitting} required />
+                  <div style={{ display: 'flex', gap: '0.25rem' }}>
+                    <select className="form-control" value={startHour} onChange={e => setStartHour(e.target.value)} disabled={submitting} style={{ padding: '0.4rem' }}>
+                      {hours.map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                    <select className="form-control" value={startMin} onChange={e => setStartMin(e.target.value)} disabled={submitting} style={{ padding: '0.4rem' }}>
+                      {minutesOptions.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <select className="form-control" value={startAmpm} onChange={e => setStartAmpm(e.target.value)} disabled={submitting} style={{ padding: '0.4rem' }}>
+                      <option value="AM">AM</option>
+                      <option value="PM">PM</option>
+                    </select>
+                  </div>
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label>End Time</label>
-                  <input type="time" className="form-control" value={endTime} onChange={e => setEndTime(e.target.value)} disabled={submitting} required />
+                  <div style={{ display: 'flex', gap: '0.25rem' }}>
+                    <select className="form-control" value={endHour} onChange={e => setEndHour(e.target.value)} disabled={submitting} style={{ padding: '0.4rem' }}>
+                      {hours.map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                    <select className="form-control" value={endMin} onChange={e => setEndMin(e.target.value)} disabled={submitting} style={{ padding: '0.4rem' }}>
+                      {minutesOptions.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <select className="form-control" value={endAmpm} onChange={e => setEndAmpm(e.target.value)} disabled={submitting} style={{ padding: '0.4rem' }}>
+                      <option value="AM">AM</option>
+                      <option value="PM">PM</option>
+                    </select>
+                  </div>
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label>Block Type</label>

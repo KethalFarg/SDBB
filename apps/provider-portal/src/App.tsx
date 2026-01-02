@@ -6,7 +6,8 @@ import {
   CalendarDays, 
   Clock, 
   TrendingUp, 
-  Settings as SettingsIcon 
+  Settings as SettingsIcon,
+  MessageSquare
 } from 'lucide-react';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Login } from './pages/Login';
@@ -21,6 +22,7 @@ import { Sales } from './pages/Sales';
 import { LeadDetail } from './pages/LeadDetail';
 import { Appointments } from './pages/Appointments';
 import { Settings } from './pages/Settings';
+import { HelpSupport } from './pages/HelpSupport';
 import { supabase } from './supabaseClient';
 import { useSession } from './hooks/useSession';
 import { usePracticeId } from './hooks/usePracticeId';
@@ -67,6 +69,7 @@ function Layout({ children }: { children: React.ReactNode }) {
                 </div>
               </div>
             </Link>
+            {/* 
             <Link to="/assessments" className={`nav-link ${isActive('/assessments') ? 'active' : ''}`}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <ClipboardList size={18} />
@@ -76,6 +79,7 @@ function Layout({ children }: { children: React.ReactNode }) {
                 </div>
               </div>
             </Link>
+            */}
             <Link to="/appointments" className={`nav-link ${isActive('/appointments') ? 'active' : ''}`}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <CalendarDays size={18} />
@@ -105,6 +109,16 @@ function Layout({ children }: { children: React.ReactNode }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <SettingsIcon size={18} />
                 <span>Settings</span>
+              </div>
+            </Link>
+          </div>
+
+          <div className="nav-group">
+            <span className="nav-group-title">Support</span>
+            <Link to="/support" className={`nav-link ${isActive('/support') ? 'active' : ''}`}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <MessageSquare size={18} />
+                <span>Help & Support</span>
               </div>
             </Link>
           </div>
@@ -157,6 +171,7 @@ export default function App() {
         <Route path="/availability" element={<ProtectedRoute><Layout><Availability /></Layout></ProtectedRoute>} />
         <Route path="/sales" element={<ProtectedRoute><Layout><Sales /></Layout></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />
+        <Route path="/support" element={<ProtectedRoute><Layout><HelpSupport /></Layout></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/dashboard" />} />
       </Routes>
     </Router>
