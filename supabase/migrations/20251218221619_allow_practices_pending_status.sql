@@ -8,3 +8,5 @@ ADD CONSTRAINT practices_status_check
 CHECK (status IN ('active', 'paused', 'pending'));
 
 
+
+

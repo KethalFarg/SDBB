@@ -253,8 +253,8 @@ export function BookingCenter() {
       };
 
       const [availRes, apptsRes] = await Promise.all([
-        fetch(`${baseUrl}/practices/${selectedPractice}/availability?date=${selectedDate}`, { headers }),
-        fetch(`${baseUrl}/practices/${selectedPractice}/appointments?date=${selectedDate}`, { headers })
+        fetch(`${baseUrl}/availability?date=${selectedDate}`, { headers }),
+        fetch(`${baseUrl}/appointments?date=${selectedDate}`, { headers })
       ]);
 
       if (!availRes.ok) throw new Error(`Availability fetch failed: ${availRes.statusText}`);
