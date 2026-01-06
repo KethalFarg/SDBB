@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { decode } from "https://deno.land/x/djwt@v2.8/mod.ts"
 import { AdminPracticeRequest, AdminImpersonateRequest, AssignDesignationRequest, DesignationItem, Practice } from "../_shared/api-types.ts"
 import { calculateDistance } from "../_shared/routing-engine.ts"
 import { requireAdminAuth } from "../_shared/admin-auth.ts"
@@ -7,8 +8,8 @@ import { maybeSyncLeadToGHL } from "../_shared/ghl.ts"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+  "Access-Control-Allow-Headers": "*",
+  "Access-Control-Allow-Methods": "*",
 };
 
 async function linkUserToPractice(supabase: any, adminUserId: string, user_id: string, practice_id: string, role?: string) {
@@ -212,26 +213,30 @@ serve(async (req) => {
     if (conversationMatch || messagesMatch) {
       const practiceId = (conversationMatch || messagesMatch)![1];
       
-      // 1. Verify Authentication
+      // 1. Verify Authentication via JWT Decode (Robust method)
       const authHeader = req.headers.get('Authorization');
-      if (!authHeader) return new Response(JSON.stringify({ error: 'Unauthorized', details: 'No Authorization header' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      if (!authHeader) return new Response(JSON.stringify({ error: 'Unauthorized', details: 'Missing Auth header' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       
-      const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-      const authClient = createClient(supabaseUrl, anonKey ?? '', {
-        global: { headers: { Authorization: authHeader } }
-      });
-      const { data: { user }, error: authError } = await authClient.auth.getUser();
-      if (authError || !user) {
-        console.error('[admin-api] Auth error:', authError);
-        return new Response(JSON.stringify({ error: 'Unauthorized', details: authError?.message }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      const token = authHeader.replace('Bearer ', '');
+      let userId: string;
+      try {
+        const [, payload] = decode(token);
+        userId = (payload as any)?.sub;
+        if (!userId) throw new Error('No sub in token');
+      } catch (e) {
+        console.error('[admin-api] JWT Decode Error:', e);
+        return new Response(JSON.stringify({ error: 'Unauthorized', details: 'Invalid token format' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      // 2. Authorization Check
+      // 2. Authorization Check (using Service Role)
       // Admins allow all. Practice users only their own practice.
-      const { data: adminRecord } = await supabase.from('admin_users').select('user_id').eq('user_id', user.id).maybeSingle();
+      const { data: adminRecord } = await supabase.from('admin_users').select('user_id').eq('user_id', userId).maybeSingle();
       if (!adminRecord) {
-        const { data: practiceUser } = await supabase.from('practice_users').select('practice_id').eq('user_id', user.id).eq('practice_id', practiceId).maybeSingle();
-        if (!practiceUser) return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const { data: practiceUser } = await supabase.from('practice_users').select('practice_id').eq('user_id', userId).eq('practice_id', practiceId).maybeSingle();
+        if (!practiceUser) {
+          console.log(`[admin-api] Forbidden: userId=${userId} practiceId=${practiceId}`);
+          return new Response(JSON.stringify({ error: 'Forbidden', details: 'User not mapped to this practice' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
       }
 
       // 3. Handle Route
@@ -268,7 +273,7 @@ serve(async (req) => {
         const senderRole = adminRecord ? 'admin' : 'practice';
         const { data: newMessage, error } = await supabase.from('messages').insert({
           conversation_id: conv.id,
-          sender_user_id: user.id,
+          sender_user_id: userId,
           sender_role: senderRole,
           body: body
         }).select().single();
