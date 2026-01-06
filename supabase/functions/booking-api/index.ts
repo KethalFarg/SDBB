@@ -69,20 +69,26 @@ serve(async (req) => {
     }
 
     const authorizePracticeAccess = async (sub: string, practiceId?: string | null) => {
-      if (!practiceId) throw new Error('practice_id required');
+      if (!practiceId) {
+        console.error('[AUTH ERROR] No practiceId provided to authorizePracticeAccess');
+        throw new Error('practice_id required');
+      }
 
       // 1. Check admin_users
-      console.log('[AUTH DEBUG]', {
-        sub,
-        checking_admin_users: true
-      });
-      const { data: adminRecord } = await supabaseAdmin
+      console.log('[AUTH DEBUG] Checking admin status for sub:', sub);
+      
+      const { data: adminRecord, error: adminError } = await supabaseAdmin
         .from('admin_users')
         .select('user_id')
         .eq('user_id', sub)
         .limit(1)
         .maybeSingle();
       
+      if (adminError) {
+        console.error('[AUTH ERROR] admin_users query failed:', adminError);
+        throw new Error(`Database error checking admin status: ${adminError.message}`);
+      }
+
       const isAdmin = !!adminRecord;
 
       if (isAdmin) {
@@ -91,13 +97,19 @@ serve(async (req) => {
       }
 
       // 2. Check practice_users
-      const { data: practiceMapping } = await supabaseAdmin
+      console.log('[AUTH DEBUG] Not an admin, checking practice mapping for practiceId:', practiceId);
+      const { data: practiceMapping, error: mapError } = await supabaseAdmin
         .from('practice_users')
         .select('practice_id')
         .eq('user_id', sub)
         .eq('practice_id', practiceId)
         .limit(1)
         .maybeSingle();
+      
+      if (mapError) {
+        console.error('[AUTH ERROR] practice_users query failed:', mapError);
+        throw new Error(`Database error checking practice mapping: ${mapError.message}`);
+      }
       
       if (!practiceMapping) {
         console.log(`[AUTH] Forbidden | sub=${sub} route_practice=${practiceId}`);
