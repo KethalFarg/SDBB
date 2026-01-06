@@ -23,7 +23,12 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         color: 'white' 
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
-          <h2 style={{ margin: 0, fontSize: '1.25rem' }}>SD Admin</h2>
+          <img 
+            src="https://imagedelivery.net/ye6TBwd9tSy8dGYL2VHjgg/ce16fd48-9fa7-43aa-08cb-882b8da2cb00/public" 
+            alt="SD Admin" 
+            style={{ height: '32px', width: 'auto', cursor: 'pointer' }}
+            onClick={() => navigate('/admin/dashboard')}
+          />
           <nav style={{ display: 'flex', gap: '1rem' }}>
             <button 
               onClick={() => navigate('/admin/dashboard')}
