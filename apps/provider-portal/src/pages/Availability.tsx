@@ -64,7 +64,8 @@ const to24h = (hour: string, minute: string, ampm: string): string => {
 // Helper: Build slots for the grid (7 AM to 7 PM)
 const START_MIN = 7 * 60; // 7:00 AM
 const END_MIN = 19 * 60; // 7:00 PM
-const SLOT_STEP = 15; // 15 minutes
+const SLOT_STEP = 15; // 15-minute intervals for flexible start times
+const TOGGLE_DURATION = 60; // Every click toggles exactly 1 hour
 
 export function Availability() {
   const { session } = useSession();
@@ -145,7 +146,7 @@ export function Availability() {
     
     setSavingSlot(true);
     setSaveError(null);
-    const slotEndMin = slotStartMin + SLOT_STEP;
+    const slotEndMin = slotStartMin + TOGGLE_DURATION;
     const slotStartStr = minutesToTime(slotStartMin);
     const slotEndStr = minutesToTime(slotEndMin);
     
@@ -153,52 +154,16 @@ export function Availability() {
 
     try {
       if (coveringBlock) {
-        // REMOVE AVAILABILITY
-        const bStart = timeToMinutes(coveringBlock.start_time);
-        const bEnd = timeToMinutes(coveringBlock.end_time);
-
-        if (bStart === slotStartMin && bEnd === slotEndMin) {
-          // Exact match: Delete
-          const { error: delErr } = await supabase
-            .from('availability_blocks')
-            .delete()
-            .eq('id', coveringBlock.id);
-          if (delErr) throw delErr;
-        } else if (bStart === slotStartMin) {
-          // Start match: Update start_time
-          const { error: updErr } = await supabase
-            .from('availability_blocks')
-            .update({ start_time: slotEndStr })
-            .eq('id', coveringBlock.id);
-          if (updErr) throw updErr;
-        } else if (bEnd === slotEndMin) {
-          // End match: Update end_time
-          const { error: updErr } = await supabase
-            .from('availability_blocks')
-            .update({ end_time: slotStartStr })
-            .eq('id', coveringBlock.id);
-          if (updErr) throw updErr;
-        } else {
-          // Middle split: Update current to end at slotStart, insert new starting at slotEnd
-          const { error: updErr } = await supabase
-            .from('availability_blocks')
-            .update({ end_time: slotStartStr })
-            .eq('id', coveringBlock.id);
-          if (updErr) throw updErr;
-
-          const { error: insErr } = await supabase
-            .from('availability_blocks')
-            .insert({
-              practice_id: practiceId,
-              day_of_week: dayIdx,
-              start_time: slotEndStr,
-              end_time: minutesToTime(bEnd),
-              type: coveringBlock.type
-            });
-          if (insErr) throw insErr;
-        }
+        // REMOVE ENTIRE BLOCK - This ensures no 15-min fragments are accidentally left behind.
+        // If you click anywhere in a block, the whole block is removed.
+        const { error: delErr } = await supabase
+          .from('availability_blocks')
+          .delete()
+          .eq('id', coveringBlock.id);
+        if (delErr) throw delErr;
       } else {
-        // ADD AVAILABILITY
+        // ADD 60 MINUTES OF AVAILABILITY
+        // This provides the "One Click = One Hour" behavior the user requested.
         const { error: insErr } = await supabase
           .from('availability_blocks')
           .insert({
@@ -211,7 +176,7 @@ export function Availability() {
         if (insErr) throw insErr;
 
         // MERGE adjacent blocks of SAME type on SAME day
-        // Let's re-fetch first to get all IDs for proper merging
+        // This allows providers to build longer shifts (2h, 3h, etc.) by clicking back-to-back.
         const { data: refreshedDayBlocks } = await supabase
           .from('availability_blocks')
           .select('*')
@@ -219,6 +184,7 @@ export function Availability() {
           .eq('day_of_week', dayIdx)
           .eq('type', gridType)
           .order('start_time', { ascending: true });
+// ...
 
         if (refreshedDayBlocks && refreshedDayBlocks.length > 1) {
           for (let i = 0; i < refreshedDayBlocks.length - 1; i++) {
@@ -355,8 +321,8 @@ export function Availability() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
             <h3 style={{ fontSize: '1.125rem', marginBottom: '0.25rem', color: 'var(--color-text-main)' }}>Weekly Availability</h3>
-            <p style={{ fontSize: '0.875rem', margin: 0, color: 'var(--color-text-main)' }}>Click a time slot to toggle weekly availability for new patient appointments.</p>
-            <p style={{ fontSize: '0.75rem', margin: '0.25rem 0 0 0', color: 'var(--color-text-muted)' }}>This does not show booked appointments. One-time closures will be handled separately.</p>
+            <p style={{ fontSize: '0.875rem', margin: 0, color: 'var(--color-text-main)' }}>Click any 15-minute slot to add a <strong>1-hour</strong> availability block.</p>
+            <p style={{ fontSize: '0.75rem', margin: '0.25rem 0 0 0', color: 'var(--color-text-muted)' }}>Clicking an existing block will remove it entirely. Back-to-back clicks will merge into longer blocks.</p>
           </div>
 
           <div style={{ display: 'flex', gap: '2rem' }}>
@@ -417,6 +383,11 @@ export function Availability() {
                   {RENDER_DAYS.map((dayIdx) => {
                     const block = isSlotCovered(dayIdx, m);
                     const isAvailable = !!block;
+                    const bStart = isAvailable ? timeToMinutes(block.start_time) : 0;
+                    const bEnd = isAvailable ? timeToMinutes(block.end_time) : 0;
+                    const isStart = isAvailable && bStart === m;
+                    const isLastSlot = isAvailable && bEnd === m + SLOT_STEP;
+                    
                     const slotLabel = formatTimeLabel(m, use12h);
                     return (
                       <td 
@@ -424,25 +395,33 @@ export function Availability() {
                         onClick={() => toggleSlot(dayIdx, m)}
                         style={{ 
                           padding: 0, 
-                          height: '28px',
-                          borderBottom: '1px solid var(--color-border)', 
+                          height: '32px', // Compact rows for 15-min intervals
+                          borderBottom: m % 60 === 45 ? '2px solid var(--color-border)' : '1px solid var(--color-border-light)', 
                           borderRight: '1px solid var(--color-border)',
                           backgroundColor: isAvailable ? 'var(--color-primary-light)' : 'transparent',
                           cursor: savingSlot ? 'wait' : 'pointer',
-                          transition: 'all 0.15s ease',
+                          transition: 'all 0.1s ease',
                           position: 'relative'
                         }}
-                        title={isAvailable ? `${block.type.replace('_', ' ')}: ${formatTimeLabel(timeToMinutes(block.start_time), use12h)} – ${formatTimeLabel(timeToMinutes(block.end_time), use12h)}` : `Add ${slotLabel}`}
+                        title={isAvailable ? `${block.type.replace('_', ' ')}: ${formatTimeLabel(bStart, use12h)} – ${formatTimeLabel(bEnd, use12h)}` : `Add 1-hour availability starting at ${slotLabel}`}
                       >
                         {isAvailable && (
                           <div style={{ 
                             position: 'absolute', 
-                            top: 0, left: 0, right: 0, bottom: 0,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '0.625rem', color: 'white', opacity: 0.8,
-                            pointerEvents: 'none'
+                            top: isStart ? '2px' : 0, 
+                            left: '2px', 
+                            right: '2px', 
+                            bottom: isLastSlot ? '2px' : 0,
+                            background: 'var(--color-primary)',
+                            borderRadius: isStart && isLastSlot ? '4px' : isStart ? '4px 4px 0 0' : isLastSlot ? '0 0 4px 4px' : '0',
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            fontSize: '0.625rem', 
+                            color: 'white',
+                            zIndex: 1
                           }}>
-                            {block.type === 'new_patient' ? 'NP' : block.type === 'follow_up' ? 'FU' : ''}
+                            {isStart && (block.type === 'new_patient' ? 'NP' : block.type === 'follow_up' ? 'FU' : 'AV')}
                           </div>
                         )}
                       </td>
