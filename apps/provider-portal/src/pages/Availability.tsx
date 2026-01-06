@@ -154,16 +154,57 @@ export function Availability() {
 
     try {
       if (coveringBlock) {
-        // REMOVE ENTIRE BLOCK - This ensures no 15-min fragments are accidentally left behind.
-        // If you click anywhere in a block, the whole block is removed.
-        const { error: delErr } = await supabase
-          .from('availability_blocks')
-          .delete()
-          .eq('id', coveringBlock.id);
-        if (delErr) throw delErr;
+        // PRECISION CARVING: Instead of deleting the whole block, 
+        // we remove exactly 1 hour starting at slotStartMin.
+        const bStart = timeToMinutes(coveringBlock.start_time);
+        const bEnd = timeToMinutes(coveringBlock.end_time);
+        
+        const removeStart = slotStartMin;
+        const removeEnd = slotStartMin + TOGGLE_DURATION;
+
+        if (bStart === removeStart && bEnd === removeEnd) {
+          // Exact match: Delete record
+          const { error: delErr } = await supabase
+            .from('availability_blocks')
+            .delete()
+            .eq('id', coveringBlock.id);
+          if (delErr) throw delErr;
+        } else if (bStart === removeStart) {
+          // Carve from beginning: Update start_time
+          const { error: updErr } = await supabase
+            .from('availability_blocks')
+            .update({ start_time: minutesToTime(removeEnd) })
+            .eq('id', coveringBlock.id);
+          if (updErr) throw updErr;
+        } else if (bEnd === removeEnd) {
+          // Carve from end: Update end_time
+          const { error: updErr } = await supabase
+            .from('availability_blocks')
+            .update({ end_time: minutesToTime(removeStart) })
+            .eq('id', coveringBlock.id);
+          if (updErr) throw updErr;
+        } else {
+          // Carve from middle: Split into two records
+          const { error: updErr } = await supabase
+            .from('availability_blocks')
+            .update({ end_time: minutesToTime(removeStart) })
+            .eq('id', coveringBlock.id);
+          if (updErr) throw updErr;
+
+          const { error: insErr } = await supabase
+            .from('availability_blocks')
+            .insert({
+              practice_id: practiceId,
+              day_of_week: dayIdx,
+              start_time: minutesToTime(removeEnd),
+              end_time: minutesToTime(bEnd),
+              type: coveringBlock.type
+            });
+          if (insErr) throw insErr;
+        }
       } else {
-        // ADD 60 MINUTES OF AVAILABILITY
-        // This provides the "One Click = One Hour" behavior the user requested.
+        // ADD 1 HOUR OF AVAILABILITY
+        // We no longer auto-merge blocks, so back-to-back clicks stay as separate 'bricks'.
         const { error: insErr } = await supabase
           .from('availability_blocks')
           .insert({
@@ -174,42 +215,6 @@ export function Availability() {
             type: gridType
           });
         if (insErr) throw insErr;
-
-        // MERGE adjacent blocks of SAME type on SAME day
-        // This allows providers to build longer shifts (2h, 3h, etc.) by clicking back-to-back.
-        const { data: refreshedDayBlocks } = await supabase
-          .from('availability_blocks')
-          .select('*')
-          .eq('practice_id', practiceId)
-          .eq('day_of_week', dayIdx)
-          .eq('type', gridType)
-          .order('start_time', { ascending: true });
-// ...
-
-        if (refreshedDayBlocks && refreshedDayBlocks.length > 1) {
-          for (let i = 0; i < refreshedDayBlocks.length - 1; i++) {
-            const current = refreshedDayBlocks[i];
-            const next = refreshedDayBlocks[i + 1];
-            if (current.end_time.slice(0, 5) === next.start_time.slice(0, 5)) {
-              // Merge next into current
-              const { error: mergeUpd } = await supabase
-                .from('availability_blocks')
-                .update({ end_time: next.end_time })
-                .eq('id', current.id);
-              if (mergeUpd) throw mergeUpd;
-
-              const { error: mergeDel } = await supabase
-                .from('availability_blocks')
-                .delete()
-                .eq('id', next.id);
-              if (mergeDel) throw mergeDel;
-              
-              // Shift array to continue merging if needed
-              refreshedDayBlocks.splice(i + 1, 1);
-              i--; // Re-check current with new next
-            }
-          }
-        }
       }
       await fetchBlocks();
     } catch (err: any) {
@@ -388,6 +393,12 @@ export function Availability() {
                     const isStart = isAvailable && bStart === m;
                     const isLastSlot = isAvailable && bEnd === m + SLOT_STEP;
                     
+                    // Alternating colors for back-to-back blocks:
+                    // We use the block's start time to determine its color shade.
+                    // This creates a "brick" effect even if records are merged.
+                    const colorIndex = isAvailable ? Math.floor(bStart / 60) % 2 : 0;
+                    const brickColor = colorIndex === 0 ? 'var(--color-primary)' : '#0a3d44'; // Primary vs slightly darker
+
                     const slotLabel = formatTimeLabel(m, use12h);
                     return (
                       <td 
@@ -397,10 +408,10 @@ export function Availability() {
                         onMouseOut={(e) => { if(!isAvailable) e.currentTarget.style.backgroundColor = 'transparent' }}
                         style={{ 
                           padding: 0, 
-                          height: '36px', // Slightly taller for better click targets
+                          height: '36px', 
                           borderBottom: m % 60 === 45 ? '2px solid #cbd5e1' : '1px solid #e2e8f0', 
                           borderRight: '1px solid #e2e8f0',
-                          backgroundColor: isAvailable ? 'transparent' : 'transparent',
+                          backgroundColor: 'transparent',
                           cursor: savingSlot ? 'wait' : 'pointer',
                           transition: 'background-color 0.1s ease',
                           position: 'relative'
@@ -410,11 +421,11 @@ export function Availability() {
                         {isAvailable && (
                           <div style={{ 
                             position: 'absolute', 
-                            top: isStart ? '4px' : '1px', 
+                            top: isStart ? '4px' : '0', 
                             left: '4px', 
                             right: '4px', 
-                            bottom: isLastSlot ? '4px' : '1px',
-                            background: 'var(--color-primary)',
+                            bottom: isLastSlot ? '4px' : '0',
+                            background: brickColor,
                             borderRadius: isStart && isLastSlot ? '6px' : isStart ? '6px 6px 0 0' : isLastSlot ? '0 0 6px 6px' : '0',
                             display: 'flex', 
                             alignItems: 'center', 
@@ -422,7 +433,9 @@ export function Availability() {
                             fontSize: '0.625rem', 
                             color: 'white',
                             zIndex: 1,
-                            boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                            boxShadow: isStart || isLastSlot ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                            borderTop: isStart ? 'none' : '1px solid rgba(255,255,255,0.05)',
+                            opacity: 0.95
                           }}>
                             {isStart && (block.type === 'new_patient' ? 'NP' : block.type === 'follow_up' ? 'FU' : 'AV')}
                           </div>

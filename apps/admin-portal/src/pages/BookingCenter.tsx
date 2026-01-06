@@ -785,12 +785,17 @@ export function BookingCenter() {
                   const isEnabled = state === 'available' || state === 'booked';
                   
                   return (
-                    <tr key={m} style={{ height: '32px' }}>
+                    <tr 
+                      key={m} 
+                      style={{ height: '32px' }}
+                      onMouseOver={(e) => { if(state === 'available') e.currentTarget.style.background = isPartOfSelection ? '#f0fdfa' : '#f8fafc' }}
+                      onMouseOut={(e) => { if(state === 'available') e.currentTarget.style.background = isPartOfSelection ? '#f0fdfa' : 'transparent' }}
+                    >
                       <td style={{ 
                         width: '100px', padding: '0 1.5rem', fontSize: '0.75rem', 
                         color: isOffsetSlot ? '#94a3b8' : '#0f172a', 
                         textAlign: 'right', background: '#f8fafc', fontWeight: 800,
-                        borderBottom: isHourBoundaryBelow ? '2px solid #e2e8f0' : '1px solid #f1f5f9',
+                        borderBottom: isHourBoundaryBelow ? '2px solid #cbd5e1' : '1px solid #e2e8f0', // Darker hour lines
                         verticalAlign: 'middle', userSelect: 'none'
                       }}>
                         {timeLabel}
@@ -803,7 +808,7 @@ export function BookingCenter() {
                           cursor: state === 'available' ? 'pointer' : 'default',
                           transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
                           background: isPartOfSelection ? '#f0fdfa' : !isEnabled ? '#fcfdfe' : 'transparent',
-                          borderBottom: isHourBoundaryBelow ? '2px solid #e2e8f0' : '1px solid #f1f5f9',
+                          borderBottom: isHourBoundaryBelow ? '2px solid #cbd5e1' : '1px solid #e2e8f0', // Match hour/15-min boundary style
                           borderLeft: '1px solid #f1f5f9',
                           position: 'relative'
                         }}
