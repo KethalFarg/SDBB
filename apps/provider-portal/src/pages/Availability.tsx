@@ -393,14 +393,16 @@ export function Availability() {
                       <td 
                         key={`${dayIdx}-${m}`} 
                         onClick={() => toggleSlot(dayIdx, m)}
+                        onMouseOver={(e) => { if(!isAvailable) e.currentTarget.style.backgroundColor = '#f1f5f9' }}
+                        onMouseOut={(e) => { if(!isAvailable) e.currentTarget.style.backgroundColor = 'transparent' }}
                         style={{ 
                           padding: 0, 
-                          height: '32px', // Compact rows for 15-min intervals
-                          borderBottom: m % 60 === 45 ? '2px solid var(--color-border)' : '1px solid var(--color-border-light)', 
-                          borderRight: '1px solid var(--color-border)',
-                          backgroundColor: isAvailable ? 'var(--color-primary-light)' : 'transparent',
+                          height: '36px', // Slightly taller for better click targets
+                          borderBottom: m % 60 === 45 ? '2px solid #cbd5e1' : '1px solid #e2e8f0', 
+                          borderRight: '1px solid #e2e8f0',
+                          backgroundColor: isAvailable ? 'transparent' : 'transparent',
                           cursor: savingSlot ? 'wait' : 'pointer',
-                          transition: 'all 0.1s ease',
+                          transition: 'background-color 0.1s ease',
                           position: 'relative'
                         }}
                         title={isAvailable ? `${block.type.replace('_', ' ')}: ${formatTimeLabel(bStart, use12h)} – ${formatTimeLabel(bEnd, use12h)}` : `Add 1-hour availability starting at ${slotLabel}`}
@@ -408,18 +410,19 @@ export function Availability() {
                         {isAvailable && (
                           <div style={{ 
                             position: 'absolute', 
-                            top: isStart ? '2px' : 0, 
-                            left: '2px', 
-                            right: '2px', 
-                            bottom: isLastSlot ? '2px' : 0,
+                            top: isStart ? '4px' : '1px', 
+                            left: '4px', 
+                            right: '4px', 
+                            bottom: isLastSlot ? '4px' : '1px',
                             background: 'var(--color-primary)',
-                            borderRadius: isStart && isLastSlot ? '4px' : isStart ? '4px 4px 0 0' : isLastSlot ? '0 0 4px 4px' : '0',
+                            borderRadius: isStart && isLastSlot ? '6px' : isStart ? '6px 6px 0 0' : isLastSlot ? '0 0 6px 6px' : '0',
                             display: 'flex', 
                             alignItems: 'center', 
                             justifyContent: 'center',
                             fontSize: '0.625rem', 
                             color: 'white',
-                            zIndex: 1
+                            zIndex: 1,
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
                           }}>
                             {isStart && (block.type === 'new_patient' ? 'NP' : block.type === 'follow_up' ? 'FU' : 'AV')}
                           </div>
