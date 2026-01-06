@@ -104,6 +104,7 @@ export const PracticeChat = ({ practiceId, mode, supabase }: PracticeChatProps) 
 
   useEffect(() => {
     let mounted = true;
+    let channel: any;
 
     const init = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -114,12 +115,47 @@ export const PracticeChat = ({ practiceId, mode, supabase }: PracticeChatProps) 
         await fetchConversation(token);
       }
       await fetchMessages(token);
+
+      // --- REAL-TIME SETUP ---
+      // Listen for new messages in this conversation
+      // We need to fetch the conversationId first if we don't have it
+      const { data: conv } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('practice_id', practiceId)
+        .maybeSingle();
+      
+      if (!conv?.id || !mounted) return;
+
+      channel = supabase
+        .channel(`chat:${conv.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'messages',
+            filter: `conversation_id=eq.${conv.id}`
+          },
+          (payload: any) => {
+            console.log('[PracticeChat] New message received via Realtime', payload);
+            setMessages((prev) => {
+              // Avoid duplicates
+              if (prev.find(m => m.id === payload.new.id)) return prev;
+              return [...prev, payload.new];
+            });
+          }
+        )
+        .subscribe();
     };
 
     init();
 
     return () => {
       mounted = false;
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [practiceId, mode]);
 

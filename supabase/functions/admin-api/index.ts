@@ -203,6 +203,73 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Public route not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // --- CHAT ROUTES (Flexible Auth) ---
+
+    // GET /admin/practices/:id/conversation
+    const conversationMatch = path.match(/\/admin\/practices\/([^\/]+)\/conversation$/);
+    const messagesMatch = path.match(/\/admin\/practices\/([^\/]+)\/messages$/);
+
+    if (conversationMatch || messagesMatch) {
+      const practiceId = (conversationMatch || messagesMatch)![1];
+      
+      // 1. Verify Authentication
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      
+      const authClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY') ?? '', {
+        global: { headers: { Authorization: authHeader } }
+      });
+      const { data: { user }, error: authError } = await authClient.auth.getUser();
+      if (authError || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      // 2. Authorization Check
+      // Admins allow all. Practice users only their own practice.
+      const { data: adminRecord } = await supabase.from('admin_users').select('user_id').eq('user_id', user.id).maybeSingle();
+      if (!adminRecord) {
+        const { data: practiceUser } = await supabase.from('practice_users').select('practice_id').eq('user_id', user.id).eq('practice_id', practiceId).maybeSingle();
+        if (!practiceUser) return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // 3. Handle Route
+      if (req.method === 'GET' && conversationMatch) {
+        console.log('[admin-api] ROUTE', 'admin/practices/:id/conversation')
+        const { data: conv } = await supabase.from('conversations').select('id').eq('practice_id', practiceId).maybeSingle();
+        let finalConvId = conv?.id;
+        if (!conv) {
+          const { data: newConv, error: createError } = await supabase.from('conversations').insert({ practice_id: practiceId }).select('id').single();
+          if (createError) throw createError;
+          finalConvId = newConv.id;
+        }
+        return new Response(JSON.stringify({ conversation_id: finalConvId }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      if (req.method === 'GET' && messagesMatch) {
+        console.log('[admin-api] ROUTE', 'admin/practices/:id/messages (GET)')
+        const { data: conv } = await supabase.from('conversations').select('id').eq('practice_id', practiceId).maybeSingle();
+        if (!conv) return new Response(JSON.stringify({ data: [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const { data: messages, error } = await supabase.from('messages').select('*').eq('conversation_id', conv.id).order('created_at', { ascending: true });
+        if (error) throw error;
+        return new Response(JSON.stringify({ data: messages }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      if (req.method === 'POST' && messagesMatch) {
+        console.log('[admin-api] ROUTE', 'admin/practices/:id/messages (POST)')
+        const { body } = await req.json();
+        if (!body) return new Response(JSON.stringify({ error: 'Message body required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const { data: conv } = await supabase.from('conversations').select('id').eq('practice_id', practiceId).maybeSingle();
+        if (!conv) return new Response(JSON.stringify({ error: 'Conversation not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const senderRole = adminRecord ? 'admin' : 'practice';
+        const { data: newMessage, error } = await supabase.from('messages').insert({
+          conversation_id: conv.id,
+          sender_user_id: user.id,
+          sender_role: senderRole,
+          body: body
+        }).select().single();
+        if (error) throw error;
+        return new Response(JSON.stringify({ data: newMessage }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
     // 3. SECURITY: Enforce Admin Auth
     let adminUserId: string;
     try {

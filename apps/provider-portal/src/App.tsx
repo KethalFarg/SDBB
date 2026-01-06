@@ -4,7 +4,8 @@ import {
   Users, 
   CalendarDays, 
   Clock, 
-  TrendingUp, 
+  TrendingUp,
+  MessageSquare,
   Settings as SettingsIcon
 } from 'lucide-react';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -19,6 +20,7 @@ import { Assessments } from './pages/Assessments';
 import { Sales } from './pages/Sales';
 import { LeadDetail } from './pages/LeadDetail';
 import { Appointments } from './pages/Appointments';
+import { Messages } from './pages/Messages';
 import { Settings } from './pages/Settings';
 import { supabase } from './supabaseClient';
 import { useSession } from './hooks/useSession';
@@ -73,6 +75,12 @@ function Layout({ children }: { children: React.ReactNode }) {
                   <span>Booking Center</span>
                   <span className="nav-helper">Scheduled sessions</span>
                 </div>
+              </div>
+            </Link>
+            <Link to="/messages" className={`nav-link ${isActive('/messages') ? 'active' : ''}`}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <MessageSquare size={18} />
+                <span>Messages</span>
               </div>
             </Link>
           </div>
@@ -144,6 +152,7 @@ export default function App() {
         <Route path="/leads/:id" element={<ProtectedRoute><Layout><LeadDetail /></Layout></ProtectedRoute>} />
         <Route path="/assessments" element={<ProtectedRoute><Layout><Assessments /></Layout></ProtectedRoute>} />
         <Route path="/appointments" element={<ProtectedRoute><Layout><Appointments /></Layout></ProtectedRoute>} />
+        <Route path="/messages" element={<ProtectedRoute><Layout><Messages /></Layout></ProtectedRoute>} />
         <Route path="/availability" element={<ProtectedRoute><Layout><Availability /></Layout></ProtectedRoute>} />
         <Route path="/sales" element={<ProtectedRoute><Layout><Sales /></Layout></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />
