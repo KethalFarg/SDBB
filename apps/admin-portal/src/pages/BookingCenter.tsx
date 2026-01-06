@@ -100,9 +100,8 @@ const isSlotWithinAvailability = (slotStart: number, slotEnd: number, blocks: an
   return blocks.some(b => {
     const bStart = timeToMinutes(b.start_time);
     const bEnd = timeToMinutes(b.end_time);
-    // Strict match with RPC: end_time must be strictly less than block end_time
-    // to satisfy the p_end_time::time < ab.end_time check in SQL
-    return slotStart >= bStart && slotEnd < bEnd;
+    // to satisfy the p_end_time::time <= ab.end_time check in SQL
+    return slotStart >= bStart && slotEnd <= bEnd;
   });
 };
 
@@ -127,7 +126,7 @@ const timestampToMinutes = (timestamp: string, tz: string): number => {
 
 const START_MIN = 7 * 60; // 7:00 AM
 const END_MIN = 19 * 60; // 7:00 PM (12 hours)
-const SLOT_STEP = 30; // 30-minute slots ONLY
+const SLOT_STEP = 15; // 15-minute slots for finer control
 
 // --- Sub-components ---
 
@@ -166,7 +165,7 @@ export function BookingCenter() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [searchTerm, setSearchQuery] = useState('');
-  const [duration, setDuration] = useState(30);
+  const [duration, setDuration] = useState(60);
   const [liveLeads, setLiveLeads] = useState<Array<{ id: string; first_name: string | null; last_name: string | null; phone: string | null; email: string | null }>>([]);
   const [leadsLoading, setLeadsLoading] = useState(false);
   const [leadsError, setLeadsError] = useState<string | null>(null);
@@ -474,14 +473,17 @@ export function BookingCenter() {
   }, [liveAppointments, availabilityData.tz, leadsMap]);
 
   const getSlotState = (m: number) => {
-    // 1. Check if it's booked (Overrides everything else)
+    // 1. Check if the exact start of this slot is booked
     if (bookedSlotsByMinute[m]) return 'booked';
 
-    // 2. Check if it's in availability blocks
-    const enabled = isSlotWithinAvailability(m, m + SLOT_STEP, availabilityData.dayBlocks);
+    // 2. Check if any part of the proposed duration overlaps with an existing appointment
+    for (let offset = 0; offset < duration; offset += SLOT_STEP) {
+      if (bookedSlotsByMinute[m + offset]) return 'unavailable';
+    }
+
+    // 3. Check if the FULL duration fits within availability blocks
+    const enabled = isSlotWithinAvailability(m, m + duration, availabilityData.dayBlocks);
     if (!enabled) return 'unavailable';
-    
-    // TODO: Apply exceptions (Phase B)
     
     return 'available';
   };
@@ -776,16 +778,16 @@ export function BookingCenter() {
                 {slots.map(m => {
                   const state = getSlotState(m);
                   const isSelected = selectedSlot === m;
-                  const isHalfHour = m % 60 !== 0;
+                  const isOffsetSlot = m % 60 !== 0;
                   const timeLabel = format12h(m);
                   const isHourBoundaryBelow = (m + SLOT_STEP) % 60 === 0;
                   const isEnabled = state === 'available' || state === 'booked';
                   
                   return (
-                    <tr key={m} style={{ height: '40px' }}>
+                    <tr key={m} style={{ height: '32px' }}>
                       <td style={{ 
                         width: '100px', padding: '0 1.5rem', fontSize: '0.75rem', 
-                        color: isHalfHour ? '#94a3b8' : '#0f172a', 
+                        color: isOffsetSlot ? '#94a3b8' : '#0f172a', 
                         textAlign: 'right', background: '#f8fafc', fontWeight: 800,
                         borderBottom: isHourBoundaryBelow ? '2px solid #e2e8f0' : '1px solid #f1f5f9',
                         verticalAlign: 'middle', userSelect: 'none'
@@ -989,7 +991,7 @@ export function BookingCenter() {
                 <div>
                   <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', marginBottom: '0.75rem', letterSpacing: '0.05em' }}>APPOINTMENT DURATION</label>
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    {[30, 60].map(d => (
+                    {[60].map(d => (
                       <button 
                         key={d}
                         onClick={() => setDuration(d)}
@@ -1001,7 +1003,7 @@ export function BookingCenter() {
                           borderColor: duration === d ? '#0c4c54' : '#e2e8f0'
                         }}
                       >
-                        {d}m
+                        {d}m (Standard)
                       </button>
                     ))}
                   </div>

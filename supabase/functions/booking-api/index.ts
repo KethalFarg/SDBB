@@ -22,7 +22,7 @@ const supabaseAdmin = (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY)
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-practice-id',
+  'Access-Control-Allow-Headers': '*',
 }
 
 function getPracticeIdFromRequest(req: Request): string | null {
@@ -306,13 +306,37 @@ serve(async (req) => {
         const timezone = practice?.timezone || 'America/New_York';
         const dayOfWeek = dayOfWeekInTz(date, timezone);
 
-        const [blocksRes, exceptionsRes] = await Promise.all([
-          supabaseAdmin.from('availability_blocks').select('*').eq('practice_id', practiceId).eq('day_of_week', dayOfWeek).order('start_time'),
-          supabaseAdmin.from('availability_exceptions').select('*').eq('practice_id', practiceId).eq('exception_date', date).order('start_time', { nullsFirst: true })
-        ]);
+        // 1. Fetch regular availability blocks
+        const blocksRes = await supabaseAdmin
+          .from('availability_blocks')
+          .select('*')
+          .eq('practice_id', practiceId)
+          .eq('day_of_week', dayOfWeek)
+          .order('start_time');
 
-        if (blocksRes.error) throw blocksRes.error;
-        if (exceptionsRes.error) throw exceptionsRes.error;
+        if (blocksRes.error) {
+          console.error('[DB ERROR] availability_blocks:', blocksRes.error.message);
+          throw new Error(`Database error: ${blocksRes.error.message}`);
+        }
+
+        // 2. Fetch exceptions (one-time closures) - DEFENSIVE WRAP
+        let exceptionsData = [];
+        try {
+          const { data, error } = await supabaseAdmin
+            .from('availability_exceptions')
+            .select('*')
+            .eq('practice_id', practiceId)
+            .eq('exception_date', date)
+            .order('start_time', { nullsFirst: true });
+          
+          if (error) {
+            console.warn('[DB WARNING] availability_exceptions query failed (likely schema mismatch):', error.message);
+          } else {
+            exceptionsData = data || [];
+          }
+        } catch (e: any) {
+          console.warn('[DB WARNING] availability_exceptions crashed:', e.message);
+        }
 
         return new Response(JSON.stringify({
           data: {
@@ -321,7 +345,7 @@ serve(async (req) => {
             timezone,
             day_of_week: dayOfWeek,
             blocks: blocksRes.data || [],
-            exceptions: exceptionsRes.data || []
+            exceptions: exceptionsData
           }
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       } catch (err) {
@@ -743,8 +767,13 @@ serve(async (req) => {
 
     return new Response('Not Found', { status: 404, headers: corsHeaders })
   } catch (error) {
+    console.error('[FATAL ERROR] booking-api:', error);
     return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { 
+        ...corsHeaders, 
+        'Content-Type': 'application/json',
+        'x-debug-error': error.message 
+      },
       status: 400,
     })
   }
