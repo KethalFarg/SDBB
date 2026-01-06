@@ -32,12 +32,13 @@ export function Messages() {
               .from('conversations')
               .select('practice_id')
               .eq('id', payload.new.conversation_id)
-              .single();
+              .maybeSingle();
             
             if (conv) {
+              const practiceId = (conv as any).practice_id;
               setLastMessages(prev => ({
                 ...prev,
-                [conv.practice_id]: payload.new
+                [practiceId]: payload.new
               }));
             }
           }
@@ -59,7 +60,7 @@ export function Messages() {
       
       if (convError) throw convError;
 
-      const messagePromises = (convs || []).map(async (c) => {
+      const messagePromises = (convs || []).map(async (c: any) => {
         const { data: msg } = await supabase
           .from('messages')
           .select('sender_role, created_at')
