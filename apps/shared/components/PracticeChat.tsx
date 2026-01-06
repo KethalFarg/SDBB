@@ -111,36 +111,40 @@ export const PracticeChat = ({ practiceId, mode, supabase }: PracticeChatProps) 
       const token = session?.access_token;
       if (!token || !mounted) return;
 
-      if (mode === 'admin') {
-        await fetchConversation(token);
+      // 1. Fetch/Create conversation via API
+      let currentConvId: string | null = null;
+      try {
+        const res = await fetch(`${ADMIN_API_BASE}/admin/practices/${practiceId}/conversation`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          currentConvId = data.conversation_id;
+          setConversationId(currentConvId);
+        }
+      } catch (err) {
+        console.error('Failed to init conversation:', err);
       }
+
+      // 2. Fetch initial messages
       await fetchMessages(token);
 
-      // --- REAL-TIME SETUP ---
-      // Listen for new messages in this conversation
-      // We need to fetch the conversationId first if we don't have it
-      const { data: conv } = await supabase
-        .from('conversations')
-        .select('id')
-        .eq('practice_id', practiceId)
-        .maybeSingle();
-      
-      if (!conv?.id || !mounted) return;
+      if (!currentConvId || !mounted) return;
 
+      // 3. Setup Realtime using the ID we just got
       channel = supabase
-        .channel(`chat:${conv.id}`)
+        .channel(`chat:${currentConvId}`)
         .on(
           'postgres_changes',
           {
             event: 'INSERT',
             schema: 'public',
             table: 'messages',
-            filter: `conversation_id=eq.${conv.id}`
+            filter: `conversation_id=eq.${currentConvId}`
           },
           (payload: any) => {
             console.log('[PracticeChat] New message received via Realtime', payload);
             setMessages((prev) => {
-              // Avoid duplicates
               if (prev.find(m => m.id === payload.new.id)) return prev;
               return [...prev, payload.new];
             });
