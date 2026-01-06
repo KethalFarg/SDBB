@@ -77,12 +77,6 @@ function Layout({ children }: { children: React.ReactNode }) {
                 </div>
               </div>
             </Link>
-            <Link to="/messages" className={`nav-link ${isActive('/messages') ? 'active' : ''}`}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <MessageSquare size={18} />
-                <span>Messages</span>
-              </div>
-            </Link>
           </div>
 
           <div className="nav-group">
