@@ -77,6 +77,16 @@ function Layout({ children }: { children: React.ReactNode }) {
                 </div>
               </div>
             </Link>
+
+            {/* STEALTH FEATURE: Only visible to Brett during development */}
+            {session?.user?.email === 'brett.gilbertson@gmail.com' && (
+              <Link to="/messages" className={`nav-link ${isActive('/messages') ? 'active' : ''}`}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <MessageSquare size={18} />
+                  <span>Messages (Beta)</span>
+                </div>
+              </Link>
+            )}
           </div>
 
           <div className="nav-group">
