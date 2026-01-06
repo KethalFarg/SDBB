@@ -121,7 +121,20 @@ export function Availability() {
         .order('start_time', { ascending: true });
 
       if (blocksError) throw blocksError;
-      setBlocks(data || []);
+      
+      // AUTO-REPAIR: Filter out and delete any inverted blocks (start >= end)
+      const validBlocks = (data || []).filter(b => {
+        const start = timeToMinutes(b.start_time);
+        const end = timeToMinutes(b.end_time);
+        if (start >= end) {
+          console.warn('[Availability] Deleting inverted block:', b.id, b.start_time, b.end_time);
+          supabase.from('availability_blocks').delete().eq('id', b.id).then();
+          return false;
+        }
+        return true;
+      });
+
+      setBlocks(validBlocks);
     } catch (err: any) {
       console.error('Error fetching availability:', err);
       setError(err.message || 'Failed to load availability data.');
@@ -146,48 +159,55 @@ export function Availability() {
     
     setSavingSlot(true);
     setSaveError(null);
-    const slotEndMin = slotStartMin + TOGGLE_DURATION;
+    const removeStart = slotStartMin;
+    const removeEnd = slotStartMin + TOGGLE_DURATION;
     const slotStartStr = minutesToTime(slotStartMin);
-    const slotEndStr = minutesToTime(slotEndMin);
+    const slotEndStr = minutesToTime(removeEnd);
     
     const coveringBlock = isSlotCovered(dayIdx, slotStartMin);
 
     try {
       if (coveringBlock) {
-        // PRECISION CARVING: Instead of deleting the whole block, 
-        // we remove exactly 1 hour starting at slotStartMin.
+        // PRECISION CARVING
         const bStart = timeToMinutes(coveringBlock.start_time);
         const bEnd = timeToMinutes(coveringBlock.end_time);
         
-        const removeStart = slotStartMin;
-        const removeEnd = slotStartMin + TOGGLE_DURATION;
+        // Determine the actual intersection to remove
+        const actualRemoveStart = Math.max(bStart, removeStart);
+        const actualRemoveEnd = Math.min(bEnd, removeEnd);
 
-        if (bStart === removeStart && bEnd === removeEnd) {
+        if (actualRemoveStart >= actualRemoveEnd) {
+          // Nothing to remove in this block
+          setSavingSlot(false);
+          return;
+        }
+
+        if (bStart === actualRemoveStart && bEnd === actualRemoveEnd) {
           // Exact match: Delete record
           const { error: delErr } = await supabase
             .from('availability_blocks')
             .delete()
             .eq('id', coveringBlock.id);
           if (delErr) throw delErr;
-        } else if (bStart === removeStart) {
-          // Carve from beginning: Update start_time
+        } else if (bStart === actualRemoveStart) {
+          // Truncate from beginning
           const { error: updErr } = await supabase
             .from('availability_blocks')
-            .update({ start_time: minutesToTime(removeEnd) })
+            .update({ start_time: minutesToTime(actualRemoveEnd) })
             .eq('id', coveringBlock.id);
           if (updErr) throw updErr;
-        } else if (bEnd === removeEnd) {
-          // Carve from end: Update end_time
+        } else if (bEnd === actualRemoveEnd) {
+          // Truncate from end
           const { error: updErr } = await supabase
             .from('availability_blocks')
-            .update({ end_time: minutesToTime(removeStart) })
+            .update({ end_time: minutesToTime(actualRemoveStart) })
             .eq('id', coveringBlock.id);
           if (updErr) throw updErr;
         } else {
-          // Carve from middle: Split into two records
+          // Split into two blocks
           const { error: updErr } = await supabase
             .from('availability_blocks')
-            .update({ end_time: minutesToTime(removeStart) })
+            .update({ end_time: minutesToTime(actualRemoveStart) })
             .eq('id', coveringBlock.id);
           if (updErr) throw updErr;
 
@@ -196,7 +216,7 @@ export function Availability() {
             .insert({
               practice_id: practiceId,
               day_of_week: dayIdx,
-              start_time: minutesToTime(removeEnd),
+              start_time: minutesToTime(actualRemoveEnd),
               end_time: minutesToTime(bEnd),
               type: coveringBlock.type
             });
@@ -204,7 +224,18 @@ export function Availability() {
         }
       } else {
         // ADD 1 HOUR OF AVAILABILITY
-        // We no longer auto-merge blocks, so back-to-back clicks stay as separate 'bricks'.
+        // Check for overlaps before adding
+        const hasOverlap = blocks.some(b => {
+          if (b.day_of_week !== dayIdx) return false;
+          const bStart = timeToMinutes(b.start_time);
+          const bEnd = timeToMinutes(b.end_time);
+          return removeStart < bEnd && removeEnd > bStart;
+        });
+
+        if (hasOverlap) {
+          throw new Error('This 1-hour block overlaps with existing availability.');
+        }
+
         const { error: insErr } = await supabase
           .from('availability_blocks')
           .insert({
