@@ -197,22 +197,37 @@ export const PracticeChat = ({ practiceId, mode, supabase }: PracticeChatProps) 
           const isPractice = msg.sender_role === 'practice';
           const isSystem = msg.sender_role === 'system' || msg.sender_role === 'assistant';
 
+          // Visual Alignment Logic
+          // In Admin mode: Admin messages on right (Blue), Practice on left (Green)
+          // In Practice mode: Practice messages on right (Green), Admin on left (Blue)
           let alignment: 'flex-start' | 'flex-end' | 'center' = 'flex-start';
           let bgColor = '#f0f0f0';
           let textColor = '#333';
 
-          if (isAdmin) {
-            alignment = 'flex-end';
-            bgColor = '#2563eb';
-            textColor = '#fff';
-          } else if (isPractice) {
-            alignment = 'flex-start';
-            bgColor = '#16a34a';
-            textColor = '#fff';
-          } else if (isSystem) {
+          if (isSystem) {
             alignment = 'center';
             bgColor = '#e5e7eb';
             textColor = '#4b5563';
+          } else if (mode === 'admin') {
+            if (isAdmin) {
+              alignment = 'flex-end';
+              bgColor = '#0c4c54'; // Admin Theme Dark Teal
+              textColor = '#fff';
+            } else {
+              alignment = 'flex-start';
+              bgColor = '#16a34a'; // Practice Green
+              textColor = '#fff';
+            }
+          } else if (mode === 'practice') {
+            if (isPractice) {
+              alignment = 'flex-end';
+              bgColor = '#16a34a'; // Practice Green
+              textColor = '#fff';
+            } else {
+              alignment = 'flex-start';
+              bgColor = '#0c4c54'; // Admin Theme Dark Teal
+              textColor = '#fff';
+            }
           }
 
           return (
