@@ -122,19 +122,22 @@ export function Availability() {
 
       if (blocksError) throw blocksError;
       
-      // AUTO-REPAIR: Filter out and delete any inverted blocks (start >= end)
-      const validBlocks = (data || []).filter(b => {
-        const start = timeToMinutes(b.start_time);
-        const end = timeToMinutes(b.end_time);
-        if (start >= end) {
-          console.warn('[Availability] Deleting inverted block:', b.id, b.start_time, b.end_time);
-          supabase.from('availability_blocks').delete().eq('id', b.id).then();
-          return false;
-        }
-        return true;
-      });
+      const rawBlocks = data || [];
 
-      setBlocks(validBlocks);
+      // Find any "inverted" blocks (start >= end) that need repair
+      const inverted = rawBlocks.filter(b => timeToMinutes(b.start_time) >= timeToMinutes(b.end_time));
+      
+      if (inverted.length > 0) {
+        console.warn('[Availability] Repairing inverted blocks:', inverted.length);
+        // Delete them in the background
+        const idsToDelete = inverted.map(b => b.id);
+        await supabase.from('availability_blocks').delete().in('id', idsToDelete);
+        
+        // Filter them out of the current state immediately
+        setBlocks(rawBlocks.filter(b => !idsToDelete.includes(b.id)));
+      } else {
+        setBlocks(rawBlocks);
+      }
     } catch (err: any) {
       console.error('Error fetching availability:', err);
       setError(err.message || 'Failed to load availability data.');
