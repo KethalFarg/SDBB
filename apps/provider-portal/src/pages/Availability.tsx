@@ -299,8 +299,8 @@ export function Availability() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
             <h3 style={{ fontSize: '1.125rem', marginBottom: '0.25rem', color: 'var(--color-text-main)' }}>Weekly Availability</h3>
-            <p style={{ fontSize: '0.875rem', margin: 0, color: 'var(--color-text-main)' }}>Click a time slot to toggle weekly availability for new patient appointments.</p>
-            <p style={{ fontSize: '0.75rem', margin: '0.25rem 0 0 0', color: 'var(--color-text-muted)' }}>This does not show booked appointments. One-time closures will be handled separately.</p>
+            <p style={{ fontSize: '0.875rem', margin: 0, color: 'var(--color-text-main)' }}>Click any 15-minute slot to add a <strong>1-hour</strong> availability block.</p>
+            <p style={{ fontSize: '0.75rem', margin: '0.25rem 0 0 0', color: 'var(--color-text-muted)' }}>Clicking an existing block will remove it entirely. Back-to-back clicks will merge into longer blocks.</p>
           </div>
 
           <div style={{ display: 'flex', gap: '2rem' }}>
