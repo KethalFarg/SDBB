@@ -38,7 +38,7 @@ flowchart TB
   %% Booking (Hold/Confirm) - used by Call Center, Website (1.5), AI (phase 1)
   %% ============================
   subgraph C["C) Booking Engine (Portal Source of Truth)"]
-    C1["Booking Client<br/>(Portal UI / Website / AI Agent)"] --> C2["GET /practices/:id/availability"]
+    C1["Booking Client<br/>(Portal UI / Website / AI Agent)"] --> C2["GET /availability"]
     C2 --> C3["User/Agent selects slot"]
     C3 --> C4["POST /appointments/hold<br/>(Idempotency-Key)"]
     C4 --> C5{"Hold succeeded?"}

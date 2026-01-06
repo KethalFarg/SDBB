@@ -16,7 +16,7 @@ We use a domain-based function strategy where related endpoints are grouped into
 | :--- | :--- | :--- | :--- |
 | `routing-resolve` | `/routing` | Routing Logic | `POST /routing/resolve` |
 | `leads-api` | `/leads` | Lead Management | `POST /leads`<br>`GET /leads`<br>`POST /assessments` |
-| `booking-api` | `/booking` | Availability & Appts | `GET /practices/:id/availability`<br>`POST /availability_blocks`<br>`DELETE /availability_blocks/:id`<br>`POST /appointments/hold`<br>`POST /appointments/confirm`<br>`PATCH /appointments/:id` |
+| `booking-api` | `/booking` | Availability & Appts | `GET /availability`<br>`GET /appointments`<br>`POST /availability_blocks`<br>`DELETE /availability_blocks/:id`<br>`POST /appointments/hold`<br>`POST /appointments/confirm`<br>`PATCH /appointments/:id` |
 | `admin-api` | `/admin` | Admin Operations | `GET /admin/practices`<br>`POST /admin/practices`<br>`PATCH /admin/practices/:id`<br>`POST /admin/impersonate`<br>`GET /designation_review`<br>`POST /designation_review/:id/assign` |
 
 **Note**: The internal routers in each function use `path.endsWith(...)` or regex matching to handle the specific sub-paths.

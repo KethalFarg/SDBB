@@ -18,7 +18,7 @@ Define and implement the API endpoints that power routing, booking, portals, and
 - GET /assessments/:id
 
 ### Availability
-- GET /practices/:id/availability
+- GET /availability
 - POST /availability_blocks
 - DELETE /availability_blocks/:id
 
