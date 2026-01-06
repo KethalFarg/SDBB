@@ -6,6 +6,7 @@ const API_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-api`;
 
 export function Messages() {
   const [practices, setPractices] = useState<any[]>([]);
+  const [lastMessages, setLastMessages] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -15,6 +16,70 @@ export function Messages() {
   useEffect(() => {
     fetchPractices();
   }, []);
+
+  useEffect(() => {
+    if (practices.length > 0) {
+      fetchLastMessages();
+      
+      const channel = supabase
+        .channel('sidebar-notifications')
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'messages' },
+          async (payload) => {
+            // Find which practice this message belongs to
+            const { data: conv } = await supabase
+              .from('conversations')
+              .select('practice_id')
+              .eq('id', payload.new.conversation_id)
+              .single();
+            
+            if (conv) {
+              setLastMessages(prev => ({
+                ...prev,
+                [conv.practice_id]: payload.new
+              }));
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [practices]);
+
+  const fetchLastMessages = async () => {
+    try {
+      // Get the latest message for every practice conversation
+      const { data: convs, error: convError } = await supabase
+        .from('conversations')
+        .select('id, practice_id');
+      
+      if (convError) throw convError;
+
+      const messagePromises = (convs || []).map(async (c) => {
+        const { data: msg } = await supabase
+          .from('messages')
+          .select('sender_role, created_at')
+          .eq('conversation_id', c.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        return { practice_id: c.practice_id, msg };
+      });
+
+      const results = await Promise.all(messagePromises);
+      const mapped: Record<string, any> = {};
+      results.forEach(r => {
+        if (r.msg) mapped[r.practice_id] = r.msg;
+      });
+      setLastMessages(mapped);
+    } catch (err) {
+      console.error('Failed to fetch last messages:', err);
+    }
+  };
 
   const fetchPractices = async () => {
     try {
@@ -44,6 +109,17 @@ export function Messages() {
       return matchesSearch && matchesStatus;
     });
   }, [practices, searchQuery, statusFilter]);
+
+  const handlePracticeSelect = (id: string) => {
+    setSelectedId(id);
+    // Clear unread badge locally when selected
+    if (lastMessages[id]?.sender_role === 'practice') {
+      setLastMessages(prev => ({
+        ...prev,
+        [id]: { ...prev[id], sender_role: 'admin' } // Fake it as replied locally
+      }));
+    }
+  };
 
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 64px)', overflow: 'hidden' }}>
@@ -109,36 +185,54 @@ export function Messages() {
             </div>
           )}
 
-          {filteredPractices.map((p) => (
-            <div
-              key={p.id}
-              onClick={() => setSelectedId(p.id)}
-              style={{
-                padding: '1rem 1.5rem',
-                cursor: 'pointer',
-                borderBottom: '1px solid #f1f5f9',
-                background: selectedId === p.id ? '#e7f5ff' : 'transparent',
-                transition: 'background 0.2s'
-              }}
-            >
-              <div style={{ fontWeight: 600, color: '#1e293b' }}>{p.name}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
-                <span style={{ 
-                  fontSize: '0.7rem', 
-                  padding: '2px 6px', 
-                  borderRadius: '4px', 
-                  background: p.status === 'active' ? '#e6fffa' : p.status === 'pending' ? '#fffbeb' : '#fff5f5',
-                  color: p.status === 'active' ? '#047857' : p.status === 'pending' ? '#b45309' : '#b91c1c',
-                  textTransform: 'capitalize'
-                }}>
-                  {p.status}
-                </span>
-                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                  {p.profile_payload?.city || 'No city'}
-                </span>
+          {filteredPractices.map((p) => {
+            const lastMsg = lastMessages[p.id];
+            const hasUnread = lastMsg && lastMsg.sender_role === 'practice' && selectedId !== p.id;
+
+            return (
+              <div
+                key={p.id}
+                onClick={() => handlePracticeSelect(p.id)}
+                style={{
+                  padding: '1rem 1.5rem',
+                  cursor: 'pointer',
+                  borderBottom: '1px solid #f1f5f9',
+                  background: selectedId === p.id ? '#e7f5ff' : 'transparent',
+                  transition: 'background 0.2s',
+                  position: 'relative'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ fontWeight: 600, color: '#1e293b' }}>{p.name}</div>
+                  {hasUnread && (
+                    <div style={{ 
+                      width: '10px', 
+                      height: '10px', 
+                      borderRadius: '50%', 
+                      background: '#2563eb',
+                      marginTop: '5px'
+                    }} title="New message from practice" />
+                  )}
+                </div>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+                  <span style={{ 
+                    fontSize: '0.7rem', 
+                    padding: '2px 6px', 
+                    borderRadius: '4px', 
+                    background: p.status === 'active' ? '#e6fffa' : p.status === 'pending' ? '#fffbeb' : '#fff5f5',
+                    color: p.status === 'active' ? '#047857' : p.status === 'pending' ? '#b45309' : '#b91c1c',
+                    textTransform: 'capitalize'
+                  }}>
+                    {p.status}
+                  </span>
+                  <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                    {p.profile_payload?.city || 'No city'}
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

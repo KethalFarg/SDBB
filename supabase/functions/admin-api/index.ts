@@ -359,7 +359,7 @@ serve(async (req) => {
     // GET /admin/practices
     if (req.method === 'GET' && (p === '/admin/practices' || p === '/admin/practices/')) {
       console.log('[admin-api] ROUTE', 'admin/practices (GET)')
-      const { data, error } = await supabase.from('practices').select('id, name, status, created_at, booking_settings, timezone, lat, lng, radius_miles').order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('practices').select('id, name, status, created_at, booking_settings, timezone, lat, lng, radius_miles, profile_payload').order('created_at', { ascending: false });
       if (error) throw error;
       return new Response(JSON.stringify({ data }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
