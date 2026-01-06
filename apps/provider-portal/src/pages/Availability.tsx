@@ -122,19 +122,19 @@ export function Availability() {
 
       if (blocksError) throw blocksError;
       
-      const rawBlocks = data || [];
+      const rawBlocks: AvailabilityBlock[] = data || [];
 
       // Find any "inverted" blocks (start >= end) that need repair
-      const inverted = rawBlocks.filter(b => timeToMinutes(b.start_time) >= timeToMinutes(b.end_time));
+      const inverted = rawBlocks.filter((b: AvailabilityBlock) => timeToMinutes(b.start_time) >= timeToMinutes(b.end_time));
       
       if (inverted.length > 0) {
         console.warn('[Availability] Repairing inverted blocks:', inverted.length);
         // Delete them in the background
-        const idsToDelete = inverted.map(b => b.id);
+        const idsToDelete = inverted.map((b: AvailabilityBlock) => b.id);
         await supabase.from('availability_blocks').delete().in('id', idsToDelete);
         
         // Filter them out of the current state immediately
-        setBlocks(rawBlocks.filter(b => !idsToDelete.includes(b.id)));
+        setBlocks(rawBlocks.filter((b: AvailabilityBlock) => !idsToDelete.includes(b.id)));
       } else {
         setBlocks(rawBlocks);
       }
@@ -228,7 +228,7 @@ export function Availability() {
       } else {
         // ADD 1 HOUR OF AVAILABILITY
         // Check for overlaps before adding
-        const hasOverlap = blocks.some(b => {
+        const hasOverlap = blocks.some((b: AvailabilityBlock) => {
           if (b.day_of_week !== dayIdx) return false;
           const bStart = timeToMinutes(b.start_time);
           const bEnd = timeToMinutes(b.end_time);
