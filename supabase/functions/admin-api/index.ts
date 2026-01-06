@@ -258,7 +258,10 @@ serve(async (req) => {
 
       if (req.method === 'POST' && messagesMatch) {
         console.log('[admin-api] ROUTE', 'admin/practices/:id/messages (POST)')
-        const { body } = await req.json();
+        const json = await req.json();
+        const body = json.body;
+        console.log('[admin-api] Message body received:', body ? 'yes' : 'no');
+        
         if (!body) return new Response(JSON.stringify({ error: 'Message body required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         const { data: conv } = await supabase.from('conversations').select('id').eq('practice_id', practiceId).maybeSingle();
         if (!conv) return new Response(JSON.stringify({ error: 'Conversation not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
