@@ -777,7 +777,8 @@ export function BookingCenter() {
               <tbody>
                 {slots.map(m => {
                   const state = getSlotState(m);
-                  const isSelected = selectedSlot === m;
+                  const isSelectedStart = selectedSlot === m;
+                  const isPartOfSelection = selectedSlot !== null && m >= selectedSlot && m < selectedSlot + duration;
                   const isOffsetSlot = m % 60 !== 0;
                   const timeLabel = format12h(m);
                   const isHourBoundaryBelow = (m + SLOT_STEP) % 60 === 0;
@@ -801,13 +802,13 @@ export function BookingCenter() {
                           padding: 0, 
                           cursor: state === 'available' ? 'pointer' : 'default',
                           transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
-                          background: isSelected ? '#f0fdfa' : !isEnabled ? '#fcfdfe' : 'transparent',
+                          background: isPartOfSelection ? '#f0fdfa' : !isEnabled ? '#fcfdfe' : 'transparent',
                           borderBottom: isHourBoundaryBelow ? '2px solid #e2e8f0' : '1px solid #f1f5f9',
                           borderLeft: '1px solid #f1f5f9',
                           position: 'relative'
                         }}
-                        onMouseOver={(e) => { if(state === 'available') e.currentTarget.style.background = isSelected ? '#f0fdfa' : '#f8fafc' }}
-                        onMouseOut={(e) => { if(state === 'available') e.currentTarget.style.background = isSelected ? '#f0fdfa' : 'transparent' }}
+                        onMouseOver={(e) => { if(state === 'available') e.currentTarget.style.background = isPartOfSelection ? '#f0fdfa' : '#f8fafc' }}
+                        onMouseOut={(e) => { if(state === 'available') e.currentTarget.style.background = isPartOfSelection ? '#f0fdfa' : 'transparent' }}
                       >
                         {!isEnabled && (
                            <div style={{ 
@@ -843,18 +844,23 @@ export function BookingCenter() {
                           </div>
                         )}
                         
-                        {state === 'available' && isSelected && (
+                        {state === 'available' && isPartOfSelection && (
                           <div style={{ 
-                            position: 'absolute', top: '3px', left: '6px', right: '6px', bottom: '3px',
-                            background: '#0c4c54', borderRadius: '8px', border: '1px solid #0c4c54',
+                            position: 'absolute', top: '2px', left: '4px', right: '4px', bottom: '2px',
+                            background: '#0c4c54', 
+                            borderRadius: isSelectedStart ? '6px 6px 0 0' : (m + SLOT_STEP === selectedSlot + duration ? '0 0 6px 6px' : '0'),
+                            border: '1px solid #0c4c54',
                             display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5,
-                            boxShadow: '0 0 15px rgba(12,76,84,0.3)', animation: 'pulseGlow 2s infinite'
+                            boxShadow: '0 0 10px rgba(12,76,84,0.2)',
+                            animation: isSelectedStart ? 'pulseGlow 2s infinite' : 'none'
                           }}>
-                            <span style={{ fontSize: '0.7rem', fontWeight: 900, color: 'white', letterSpacing: '0.1em' }}>SELECTED SLOT</span>
+                            {isSelectedStart && (
+                              <span style={{ fontSize: '0.65rem', fontWeight: 900, color: 'white', letterSpacing: '0.05em' }}>SELECTED HOUR</span>
+                            )}
                           </div>
                         )}
 
-                        {state === 'available' && !isSelected && (
+                        {state === 'available' && !isPartOfSelection && (
                           <div style={{ height: '100%', width: '100%', display: 'flex', alignItems: 'center', padding: '0 1.25rem' }}>
                             <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#00bfa5', opacity: 0.2 }} />
                           </div>
