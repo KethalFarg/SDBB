@@ -12,9 +12,16 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUserEmail(data.user?.email || null);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('[AdminLayout] Session check:', session?.user?.email);
+      setUserEmail(session?.user?.email || null);
     });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserEmail(session?.user?.email || null);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const isActive = (path: string) => location.pathname.startsWith(path);
