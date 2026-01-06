@@ -92,7 +92,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                 border: 'none', color: 'white', padding: '0.5rem 1rem', cursor: 'pointer', borderRadius: '4px'
               }}
             >
-              Messages (Beta)
+              Messages
             </button>
 
             <button 

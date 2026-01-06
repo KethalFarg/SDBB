@@ -81,7 +81,10 @@ function Layout({ children }: { children: React.ReactNode }) {
             <Link to="/messages" className={`nav-link ${isActive('/messages') ? 'active' : ''}`}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <MessageSquare size={18} />
-                <span>Messages (Beta)</span>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span>Messages</span>
+                  <span className="nav-helper">Chat with the SD team</span>
+                </div>
               </div>
             </Link>
           </div>
