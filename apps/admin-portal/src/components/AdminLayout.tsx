@@ -70,6 +70,17 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             >
               Bookings
             </button>
+
+            <button 
+              onClick={() => navigate('/admin/messages')}
+              style={{ 
+                background: isActive('/admin/messages') ? 'rgba(255,255,255,0.2)' : 'transparent',
+                border: 'none', color: 'white', padding: '0.5rem 1rem', cursor: 'pointer', borderRadius: '4px'
+              }}
+            >
+              Messages
+            </button>
+
             <button 
               onClick={() => navigate('/admin/designation-review')}
               style={{ 

@@ -53,6 +53,14 @@ const formatTimeLabel = (minutes: number, is12h: boolean): string => {
   return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
 };
 
+// Helper: Convert 12h components to 24h string "HH:MM"
+const to24h = (hour: string, minute: string, ampm: string): string => {
+  let h = parseInt(hour, 10);
+  if (ampm === 'PM' && h !== 12) h += 12;
+  if (ampm === 'AM' && h === 12) h = 0;
+  return `${h.toString().padStart(2, '0')}:${minute}`;
+};
+
 // Helper: Build slots for the grid (7 AM to 7 PM)
 const START_MIN = 7 * 60; // 7:00 AM
 const END_MIN = 19 * 60; // 7:00 PM
@@ -80,10 +88,17 @@ export function Availability() {
   // Advanced form state
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [dayOfWeek, setDayOfWeek] = useState(1);
-  const [startTime, setStartTime] = useState('09:00');
-  const [endTime, setEndTime] = useState('17:00');
+  const [startHour, setStartHour] = useState('9');
+  const [startMin, setStartMin] = useState('00');
+  const [startAmpm, setStartAmpm] = useState('AM');
+  const [endHour, setEndHour] = useState('5');
+  const [endMin, setEndMin] = useState('00');
+  const [endAmpm, setEndAmpm] = useState('PM');
   const [type, setType] = useState('new_patient');
   const [submitting, setSubmitting] = useState(false);
+
+  const hours = Array.from({ length: 12 }, (_, i) => (i + 1).toString());
+  const minutesOptions = ['00', '15', '30', '45'];
 
   useEffect(() => {
     localStorage.setItem('sd_pref_12h', String(use12h));
@@ -106,7 +121,23 @@ export function Availability() {
         .order('start_time', { ascending: true });
 
       if (blocksError) throw blocksError;
-      setBlocks(data || []);
+      
+      const rawBlocks: AvailabilityBlock[] = data || [];
+
+      // Find any "inverted" blocks (start >= end) that need repair
+      const inverted = rawBlocks.filter((b: AvailabilityBlock) => timeToMinutes(b.start_time) >= timeToMinutes(b.end_time));
+      
+      if (inverted.length > 0) {
+        console.warn('[Availability] Repairing inverted blocks:', inverted.length);
+        // Delete them in the background
+        const idsToDelete = inverted.map((b: AvailabilityBlock) => b.id);
+        await supabase.from('availability_blocks').delete().in('id', idsToDelete);
+        
+        // Filter them out of the current state immediately
+        setBlocks(rawBlocks.filter((b: AvailabilityBlock) => !idsToDelete.includes(b.id)));
+      } else {
+        setBlocks(rawBlocks);
+      }
     } catch (err: any) {
       console.error('Error fetching availability:', err);
       setError(err.message || 'Failed to load availability data.');
@@ -131,24 +162,83 @@ export function Availability() {
     
     setSavingSlot(true);
     setSaveError(null);
-    const slotEndMin = slotStartMin + TOGGLE_DURATION;
+    const removeStart = slotStartMin;
+    const removeEnd = slotStartMin + TOGGLE_DURATION;
     const slotStartStr = minutesToTime(slotStartMin);
-    const slotEndStr = minutesToTime(slotEndMin);
+    const slotEndStr = minutesToTime(removeEnd);
     
     const coveringBlock = isSlotCovered(dayIdx, slotStartMin);
 
     try {
       if (coveringBlock) {
-        // REMOVE ENTIRE BLOCK - This ensures no 15-min fragments are accidentally left behind.
-        // If you click anywhere in a block, the whole block is removed.
-        const { error: delErr } = await supabase
-          .from('availability_blocks')
-          .delete()
-          .eq('id', coveringBlock.id);
-        if (delErr) throw delErr;
+        // PRECISION CARVING
+        const bStart = timeToMinutes(coveringBlock.start_time);
+        const bEnd = timeToMinutes(coveringBlock.end_time);
+        
+        // Determine the actual intersection to remove
+        const actualRemoveStart = Math.max(bStart, removeStart);
+        const actualRemoveEnd = Math.min(bEnd, removeEnd);
+
+        if (actualRemoveStart >= actualRemoveEnd) {
+          // Nothing to remove in this block
+          setSavingSlot(false);
+          return;
+        }
+
+        if (bStart === actualRemoveStart && bEnd === actualRemoveEnd) {
+          // Exact match: Delete record
+          const { error: delErr } = await supabase
+            .from('availability_blocks')
+            .delete()
+            .eq('id', coveringBlock.id);
+          if (delErr) throw delErr;
+        } else if (bStart === actualRemoveStart) {
+          // Truncate from beginning
+          const { error: updErr } = await supabase
+            .from('availability_blocks')
+            .update({ start_time: minutesToTime(actualRemoveEnd) })
+            .eq('id', coveringBlock.id);
+          if (updErr) throw updErr;
+        } else if (bEnd === actualRemoveEnd) {
+          // Truncate from end
+          const { error: updErr } = await supabase
+            .from('availability_blocks')
+            .update({ end_time: minutesToTime(actualRemoveStart) })
+            .eq('id', coveringBlock.id);
+          if (updErr) throw updErr;
+        } else {
+          // Split into two blocks
+          const { error: updErr } = await supabase
+            .from('availability_blocks')
+            .update({ end_time: minutesToTime(actualRemoveStart) })
+            .eq('id', coveringBlock.id);
+          if (updErr) throw updErr;
+
+          const { error: insErr } = await supabase
+            .from('availability_blocks')
+            .insert({
+              practice_id: practiceId,
+              day_of_week: dayIdx,
+              start_time: minutesToTime(actualRemoveEnd),
+              end_time: minutesToTime(bEnd),
+              type: coveringBlock.type
+            });
+          if (insErr) throw insErr;
+        }
       } else {
-        // ADD 60 MINUTES OF AVAILABILITY
-        // This provides the "One Click = One Hour" behavior the user requested.
+        // ADD 1 HOUR OF AVAILABILITY
+        // Check for overlaps before adding
+        const hasOverlap = blocks.some((b: AvailabilityBlock) => {
+          if (b.day_of_week !== dayIdx) return false;
+          const bStart = timeToMinutes(b.start_time);
+          const bEnd = timeToMinutes(b.end_time);
+          return removeStart < bEnd && removeEnd > bStart;
+        });
+
+        if (hasOverlap) {
+          throw new Error('This 1-hour block overlaps with existing availability.');
+        }
+
         const { error: insErr } = await supabase
           .from('availability_blocks')
           .insert({
@@ -159,42 +249,6 @@ export function Availability() {
             type: gridType
           });
         if (insErr) throw insErr;
-
-        // MERGE adjacent blocks of SAME type on SAME day
-        // This allows providers to build longer shifts (2h, 3h, etc.) by clicking back-to-back.
-        const { data: refreshedDayBlocks } = await supabase
-          .from('availability_blocks')
-          .select('*')
-          .eq('practice_id', practiceId)
-          .eq('day_of_week', dayIdx)
-          .eq('type', gridType)
-          .order('start_time', { ascending: true });
-// ...
-
-        if (refreshedDayBlocks && refreshedDayBlocks.length > 1) {
-          for (let i = 0; i < refreshedDayBlocks.length - 1; i++) {
-            const current = refreshedDayBlocks[i];
-            const next = refreshedDayBlocks[i + 1];
-            if (current.end_time.slice(0, 5) === next.start_time.slice(0, 5)) {
-              // Merge next into current
-              const { error: mergeUpd } = await supabase
-                .from('availability_blocks')
-                .update({ end_time: next.end_time })
-                .eq('id', current.id);
-              if (mergeUpd) throw mergeUpd;
-
-              const { error: mergeDel } = await supabase
-                .from('availability_blocks')
-                .delete()
-                .eq('id', next.id);
-              if (mergeDel) throw mergeDel;
-              
-              // Shift array to continue merging if needed
-              refreshedDayBlocks.splice(i + 1, 1);
-              i--; // Re-check current with new next
-            }
-          }
-        }
       }
       await fetchBlocks();
     } catch (err: any) {
@@ -209,6 +263,9 @@ export function Availability() {
     e.preventDefault();
     if (!practiceId) return;
     
+    const startTime = to24h(startHour, startMin, startAmpm);
+    const endTime = to24h(endHour, endMin, endAmpm);
+
     if (startTime >= endTime) {
       alert('End time must be after start time.');
       return;
@@ -238,8 +295,12 @@ export function Availability() {
         });
 
       if (error) throw error;
-      setStartTime('09:00');
-      setEndTime('17:00');
+      setStartHour('9');
+      setStartMin('00');
+      setStartAmpm('AM');
+      setEndHour('5');
+      setEndMin('00');
+      setEndAmpm('PM');
       await fetchBlocks();
     } catch (err: any) {
       alert(err.message || 'Failed to add block.');
@@ -366,19 +427,27 @@ export function Availability() {
                     const isStart = isAvailable && bStart === m;
                     const isLastSlot = isAvailable && bEnd === m + SLOT_STEP;
                     
+                    // Alternating colors for back-to-back blocks:
+                    // We use the block's start time to determine its color shade.
+                    // This creates a "brick" effect even if records are merged.
+                    const colorIndex = isAvailable ? Math.floor(bStart / 60) % 2 : 0;
+                    const brickColor = colorIndex === 0 ? 'var(--color-primary)' : '#0a3d44'; // Primary vs slightly darker
+
                     const slotLabel = formatTimeLabel(m, use12h);
                     return (
                       <td 
                         key={`${dayIdx}-${m}`} 
                         onClick={() => toggleSlot(dayIdx, m)}
+                        onMouseOver={(e) => { if(!isAvailable) e.currentTarget.style.backgroundColor = '#f1f5f9' }}
+                        onMouseOut={(e) => { if(!isAvailable) e.currentTarget.style.backgroundColor = 'transparent' }}
                         style={{ 
                           padding: 0, 
-                          height: '32px', // Compact rows for 15-min intervals
-                          borderBottom: m % 60 === 45 ? '2px solid var(--color-border)' : '1px solid var(--color-border-light)', 
-                          borderRight: '1px solid var(--color-border)',
-                          backgroundColor: isAvailable ? 'var(--color-primary-light)' : 'transparent',
+                          height: '36px', 
+                          borderBottom: m % 60 === 45 ? '2px solid #cbd5e1' : '1px solid #e2e8f0', 
+                          borderRight: '1px solid #e2e8f0',
+                          backgroundColor: 'transparent',
                           cursor: savingSlot ? 'wait' : 'pointer',
-                          transition: 'all 0.1s ease',
+                          transition: 'background-color 0.1s ease',
                           position: 'relative'
                         }}
                         title={isAvailable ? `${block.type.replace('_', ' ')}: ${formatTimeLabel(bStart, use12h)} – ${formatTimeLabel(bEnd, use12h)}` : `Add 1-hour availability starting at ${slotLabel}`}
@@ -386,18 +455,21 @@ export function Availability() {
                         {isAvailable && (
                           <div style={{ 
                             position: 'absolute', 
-                            top: isStart ? '2px' : 0, 
-                            left: '2px', 
-                            right: '2px', 
-                            bottom: isLastSlot ? '2px' : 0,
-                            background: 'var(--color-primary)',
-                            borderRadius: isStart && isLastSlot ? '4px' : isStart ? '4px 4px 0 0' : isLastSlot ? '0 0 4px 4px' : '0',
+                            top: isStart ? '4px' : '0', 
+                            left: '4px', 
+                            right: '4px', 
+                            bottom: isLastSlot ? '4px' : '0',
+                            background: brickColor,
+                            borderRadius: isStart && isLastSlot ? '6px' : isStart ? '6px 6px 0 0' : isLastSlot ? '0 0 6px 6px' : '0',
                             display: 'flex', 
                             alignItems: 'center', 
                             justifyContent: 'center',
                             fontSize: '0.625rem', 
                             color: 'white',
-                            zIndex: 1
+                            zIndex: 1,
+                            boxShadow: isStart || isLastSlot ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                            borderTop: isStart ? 'none' : '1px solid rgba(255,255,255,0.05)',
+                            opacity: 0.95
                           }}>
                             {isStart && (block.type === 'new_patient' ? 'NP' : block.type === 'follow_up' ? 'FU' : 'AV')}
                           </div>
@@ -436,11 +508,33 @@ export function Availability() {
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label>Start Time</label>
-                  <input type="time" className="form-control" value={startTime} onChange={e => setStartTime(e.target.value)} disabled={submitting} required />
+                  <div style={{ display: 'flex', gap: '0.25rem' }}>
+                    <select className="form-control" value={startHour} onChange={e => setStartHour(e.target.value)} disabled={submitting} style={{ padding: '0.4rem' }}>
+                      {hours.map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                    <select className="form-control" value={startMin} onChange={e => setStartMin(e.target.value)} disabled={submitting} style={{ padding: '0.4rem' }}>
+                      {minutesOptions.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <select className="form-control" value={startAmpm} onChange={e => setStartAmpm(e.target.value)} disabled={submitting} style={{ padding: '0.4rem' }}>
+                      <option value="AM">AM</option>
+                      <option value="PM">PM</option>
+                    </select>
+                  </div>
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label>End Time</label>
-                  <input type="time" className="form-control" value={endTime} onChange={e => setEndTime(e.target.value)} disabled={submitting} required />
+                  <div style={{ display: 'flex', gap: '0.25rem' }}>
+                    <select className="form-control" value={endHour} onChange={e => setEndHour(e.target.value)} disabled={submitting} style={{ padding: '0.4rem' }}>
+                      {hours.map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                    <select className="form-control" value={endMin} onChange={e => setEndMin(e.target.value)} disabled={submitting} style={{ padding: '0.4rem' }}>
+                      {minutesOptions.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <select className="form-control" value={endAmpm} onChange={e => setEndAmpm(e.target.value)} disabled={submitting} style={{ padding: '0.4rem' }}>
+                      <option value="AM">AM</option>
+                      <option value="PM">PM</option>
+                    </select>
+                  </div>
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label>Block Type</label>

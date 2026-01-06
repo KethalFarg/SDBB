@@ -2,11 +2,11 @@ import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } f
 import { 
   LayoutDashboard, 
   Users, 
-  ClipboardList, 
   CalendarDays, 
   Clock, 
-  TrendingUp, 
-  Settings as SettingsIcon 
+  TrendingUp,
+  MessageSquare,
+  Settings as SettingsIcon
 } from 'lucide-react';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Login } from './pages/Login';
@@ -20,6 +20,7 @@ import { Assessments } from './pages/Assessments';
 import { Sales } from './pages/Sales';
 import { LeadDetail } from './pages/LeadDetail';
 import { Appointments } from './pages/Appointments';
+import { Messages } from './pages/Messages';
 import { Settings } from './pages/Settings';
 import { supabase } from './supabaseClient';
 import { useSession } from './hooks/useSession';
@@ -67,21 +68,22 @@ function Layout({ children }: { children: React.ReactNode }) {
                 </div>
               </div>
             </Link>
-            <Link to="/assessments" className={`nav-link ${isActive('/assessments') ? 'active' : ''}`}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <ClipboardList size={18} />
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span>Assessments</span>
-                  <span className="nav-helper">Quiz completed</span>
-                </div>
-              </div>
-            </Link>
             <Link to="/appointments" className={`nav-link ${isActive('/appointments') ? 'active' : ''}`}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <CalendarDays size={18} />
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   <span>Booking Center</span>
                   <span className="nav-helper">Scheduled sessions</span>
+                </div>
+              </div>
+            </Link>
+
+            <Link to="/messages" className={`nav-link ${isActive('/messages') ? 'active' : ''}`}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <MessageSquare size={18} />
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span>Messages</span>
+                  <span className="nav-helper">Chat with the SD team</span>
                 </div>
               </div>
             </Link>
@@ -154,6 +156,7 @@ export default function App() {
         <Route path="/leads/:id" element={<ProtectedRoute><Layout><LeadDetail /></Layout></ProtectedRoute>} />
         <Route path="/assessments" element={<ProtectedRoute><Layout><Assessments /></Layout></ProtectedRoute>} />
         <Route path="/appointments" element={<ProtectedRoute><Layout><Appointments /></Layout></ProtectedRoute>} />
+        <Route path="/messages" element={<ProtectedRoute><Layout><Messages /></Layout></ProtectedRoute>} />
         <Route path="/availability" element={<ProtectedRoute><Layout><Availability /></Layout></ProtectedRoute>} />
         <Route path="/sales" element={<ProtectedRoute><Layout><Sales /></Layout></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />

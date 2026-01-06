@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { decode } from "https://deno.land/x/djwt@v2.8/mod.ts"
 import { AdminPracticeRequest, AdminImpersonateRequest, AssignDesignationRequest, DesignationItem, Practice } from "../_shared/api-types.ts"
 import { calculateDistance } from "../_shared/routing-engine.ts"
 import { requireAdminAuth } from "../_shared/admin-auth.ts"
@@ -7,8 +8,8 @@ import { maybeSyncLeadToGHL } from "../_shared/ghl.ts"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+  "Access-Control-Allow-Headers": "*",
+  "Access-Control-Allow-Methods": "*",
 };
 
 async function linkUserToPractice(supabase: any, adminUserId: string, user_id: string, practice_id: string, role?: string) {
@@ -203,6 +204,84 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Public route not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // --- CHAT ROUTES (Flexible Auth) ---
+
+    // GET /admin/practices/:id/conversation
+    const conversationMatch = p.match(/\/admin\/practices\/([^\/]+)\/conversation$/);
+    const messagesMatch = p.match(/\/admin\/practices\/([^\/]+)\/messages$/);
+
+    if (conversationMatch || messagesMatch) {
+      const practiceId = (conversationMatch || messagesMatch)![1];
+      
+      // 1. Verify Authentication via JWT Decode (Robust method)
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) return new Response(JSON.stringify({ error: 'Unauthorized', details: 'Missing Auth header' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      
+      const token = authHeader.replace('Bearer ', '');
+      let userId: string;
+      try {
+        const [, payload] = decode(token);
+        userId = (payload as any)?.sub;
+        if (!userId) throw new Error('No sub in token');
+      } catch (e) {
+        console.error('[admin-api] JWT Decode Error:', e);
+        return new Response(JSON.stringify({ error: 'Unauthorized', details: 'Invalid token format' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // 2. Authorization Check (using Service Role)
+      // Admins allow all. Practice users only their own practice.
+      const { data: adminRecord } = await supabase.from('admin_users').select('user_id').eq('user_id', userId).maybeSingle();
+      if (!adminRecord) {
+        const { data: practiceUser } = await supabase.from('practice_users').select('practice_id').eq('user_id', userId).eq('practice_id', practiceId).maybeSingle();
+        if (!practiceUser) {
+          console.log(`[admin-api] Forbidden: userId=${userId} practiceId=${practiceId}`);
+          return new Response(JSON.stringify({ error: 'Forbidden', details: 'User not mapped to this practice' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+      }
+
+      // 3. Handle Route
+      if (req.method === 'GET' && conversationMatch) {
+        console.log('[admin-api] ROUTE', 'admin/practices/:id/conversation')
+        const { data: conv } = await supabase.from('conversations').select('id').eq('practice_id', practiceId).maybeSingle();
+        let finalConvId = conv?.id;
+        if (!conv) {
+          const { data: newConv, error: createError } = await supabase.from('conversations').insert({ practice_id: practiceId }).select('id').single();
+          if (createError) throw createError;
+          finalConvId = newConv.id;
+        }
+        return new Response(JSON.stringify({ conversation_id: finalConvId }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      if (req.method === 'GET' && messagesMatch) {
+        console.log('[admin-api] ROUTE', 'admin/practices/:id/messages (GET)')
+        const { data: conv } = await supabase.from('conversations').select('id').eq('practice_id', practiceId).maybeSingle();
+        if (!conv) return new Response(JSON.stringify({ data: [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const { data: messages, error } = await supabase.from('messages').select('*').eq('conversation_id', conv.id).order('created_at', { ascending: true });
+        if (error) throw error;
+        return new Response(JSON.stringify({ data: messages }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      if (req.method === 'POST' && messagesMatch) {
+        console.log('[admin-api] ROUTE', 'admin/practices/:id/messages (POST)')
+        const json = await req.json();
+        const body = json.body;
+        console.log('[admin-api] Message body received:', body ? 'yes' : 'no');
+        
+        if (!body) return new Response(JSON.stringify({ error: 'Message body required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const { data: conv } = await supabase.from('conversations').select('id').eq('practice_id', practiceId).maybeSingle();
+        if (!conv) return new Response(JSON.stringify({ error: 'Conversation not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        const senderRole = adminRecord ? 'admin' : 'practice';
+        const { data: newMessage, error } = await supabase.from('messages').insert({
+          conversation_id: conv.id,
+          sender_user_id: userId,
+          sender_role: senderRole,
+          body: body
+        }).select().single();
+        if (error) throw error;
+        return new Response(JSON.stringify({ data: newMessage }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
     // 3. SECURITY: Enforce Admin Auth
     let adminUserId: string;
     try {
@@ -215,7 +294,7 @@ serve(async (req) => {
     // --- ADMIN ROUTES (EXACT MATCHES FIRST) ---
 
     // GET /admin/leads/search
-    if (req.method === 'GET' && path.includes('/admin/leads/search')) {
+    if (req.method === 'GET' && p.includes('/admin/leads/search')) {
       console.log('[admin-api] ROUTE', 'admin/leads/search')
       const practice_id = url.searchParams.get('practice_id');
       const q = url.searchParams.get('q');
@@ -231,7 +310,7 @@ serve(async (req) => {
     }
 
     // POST /admin/leads/cleanup-test
-    if (req.method === 'POST' && path.includes('/admin/leads/cleanup-test')) {
+    if (req.method === 'POST' && p.includes('/admin/leads/cleanup-test')) {
       console.log('[admin-api] ROUTE', 'admin/leads/cleanup-test')
       const { data, error } = await supabase.from('leads').delete().eq('zip', '99999');
       if (error) throw error;
@@ -239,7 +318,7 @@ serve(async (req) => {
     }
 
     // POST /admin/leads (creation)
-    if (req.method === 'POST' && path.includes('/admin/leads') && !path.includes('reassign') && !path.includes('unassign')) {
+    if (req.method === 'POST' && p.includes('/admin/leads') && !p.includes('reassign') && !p.includes('unassign')) {
       console.log('[admin-api] ROUTE', 'admin/leads (POST creation)')
       const { first_name, last_name, phone, email, practice_id } = await req.json();
       
@@ -295,7 +374,7 @@ serve(async (req) => {
     }
 
     // GET /admin/map/practices
-    if (req.method === 'GET' && path.includes('/admin/map/practices')) {
+    if (req.method === 'GET' && p.includes('/admin/map/practices')) {
       console.log('[admin-api] ROUTE', 'admin/map/practices')
       const { data, error } = await supabase.from('practices').select('id, name, status, lat, lng, radius_miles');
       if (error) throw error;
@@ -303,7 +382,7 @@ serve(async (req) => {
     }
 
     // POST /admin/map/preview
-    if (req.method === 'POST' && path.includes('/admin/map/preview')) {
+    if (req.method === 'POST' && p.includes('/admin/map/preview')) {
       console.log('[admin-api] ROUTE', 'admin/map/preview')
       const { lat, lng, radius_miles } = await req.json();
       const { data: practices, error } = await supabase.from('practices').select('id, name, status, lat, lng, radius_miles').eq('status', 'active').not('lat', 'is', null).not('lng', 'is', null);
@@ -313,13 +392,13 @@ serve(async (req) => {
     }
 
     // POST /admin/impersonate
-    if (req.method === 'POST' && path.includes('/admin/impersonate')) {
+    if (req.method === 'POST' && p.includes('/admin/impersonate')) {
       console.log('[admin-api] ROUTE', 'admin/impersonate')
       return new Response(JSON.stringify({ token: 'stub' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // GET /admin/leads (list)
-    if (req.method === 'GET' && path.includes('/admin/leads')) {
+    if (req.method === 'GET' && p.includes('/admin/leads')) {
       console.log('[admin-api] ROUTE', 'admin/leads (GET list)')
       const q = url.searchParams.get('q');
       const limit = Math.min(Number(url.searchParams.get('limit') ?? '25'), 100);
@@ -340,14 +419,14 @@ serve(async (req) => {
     }
 
     // POST /admin/users/link-practice
-    if (req.method === 'POST' && path.includes('/admin/users/link-practice')) {
+    if (req.method === 'POST' && p.includes('/admin/users/link-practice')) {
       console.log('[admin-api] ROUTE', 'admin/users/link-practice')
       const { user_id, practice_id, role } = await req.json();
       return await linkUserToPractice(supabase, adminUserId, user_id, practice_id, role);
     }
 
     // POST /admin/appointments/create
-    if (req.method === 'POST' && path.includes('/admin/appointments/create')) {
+    if (req.method === 'POST' && p.includes('/admin/appointments/create')) {
       console.log('[admin-api] ROUTE', 'admin/appointments/create')
       const { practice_id, lead_id, start_at, end_at, source, notes } = await req.json();
       const { data, error } = await supabase.rpc('admin_create_appointment', {
@@ -364,7 +443,7 @@ serve(async (req) => {
     }
 
     // GET /designation_review
-    if (req.method === 'GET' && path.includes('/designation_review')) {
+    if (req.method === 'GET' && p.includes('/designation_review')) {
       console.log('[admin-api] ROUTE', 'designation_review (GET)')
       const { data, error } = await supabase.from('designation_review').select('id, lead_id, assigned_practice_id, reason_code, notes, created_at, resolved_at, leads!inner(id, zip, created_at)').is('resolved_at', null).order('created_at', { ascending: false });
       if (error) throw error;
@@ -377,7 +456,7 @@ serve(async (req) => {
     }
 
     // GET /admin/appointments/active
-    if (req.method === 'GET' && path.includes('/admin/appointments/active')) {
+    if (req.method === 'GET' && p.includes('/admin/appointments/active')) {
       console.log('[admin-api] ROUTE', 'admin/appointments/active')
       const practice_id = url.searchParams.get('practice_id');
       if (!practice_id) return new Response(JSON.stringify({ error: 'practice_id is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -396,7 +475,7 @@ serve(async (req) => {
     // --- PARAMETERIZED ROUTES (REGEX) ---
 
     // PATCH /admin/practices/:id
-    const patchPracticeMatch = path.match(/\/admin\/practices\/([^\/]+)$/);
+    const patchPracticeMatch = p.match(/\/admin\/practices\/([^\/]+)$/);
     if (req.method === 'PATCH' && patchPracticeMatch) {
       console.log('[admin-api] ROUTE', 'admin/practices/:id (PATCH)')
       const practiceId = patchPracticeMatch[1];
@@ -407,7 +486,7 @@ serve(async (req) => {
     }
 
     // GET /admin/leads/:id
-    const leadMatch = path.match(/\/admin\/leads\/([^\/]+)$/);
+    const leadMatch = p.match(/\/admin\/leads\/([^\/]+)$/);
     if (req.method === 'GET' && leadMatch) {
       const leadId = leadMatch[1];
       
@@ -423,7 +502,7 @@ serve(async (req) => {
     }
 
     // POST /admin/leads/:id/reassign
-    const reassignMatch = path.match(/\/admin\/leads\/([^\/]+)\/reassign$/);
+    const reassignMatch = p.match(/\/admin\/leads\/([^\/]+)\/reassign$/);
     if (req.method === 'POST' && reassignMatch) {
       console.log('[admin-api] ROUTE', 'admin/leads/:id/reassign')
       const leadId = reassignMatch[1];
@@ -434,7 +513,7 @@ serve(async (req) => {
     }
 
     // POST /admin/leads/:id/unassign
-    const unassignMatch = path.match(/\/admin\/leads\/([^\/]+)\/unassign$/);
+    const unassignMatch = p.match(/\/admin\/leads\/([^\/]+)\/unassign$/);
     if (req.method === 'POST' && unassignMatch) {
       console.log('[admin-api] ROUTE', 'admin/leads/:id/unassign')
       const leadId = unassignMatch[1];
@@ -444,7 +523,7 @@ serve(async (req) => {
     }
 
     // GET /admin/practices/:id/users
-    const practiceUsersMatch = path.match(/\/admin\/practices\/([^\/]+)\/users$/);
+    const practiceUsersMatch = p.match(/\/admin\/practices\/([^\/]+)\/users$/);
     if (req.method === 'GET' && practiceUsersMatch) {
       console.log('[admin-api] ROUTE', 'admin/practices/:id/users (GET)')
       const practiceId = practiceUsersMatch[1];
@@ -476,7 +555,7 @@ serve(async (req) => {
     }
 
             // POST /designation_review/:id/assign
-            const assignMatch = path.match(/\/designation_review\/([^\/]+)\/assign$/);
+            const assignMatch = p.match(/\/designation_review\/([^\/]+)\/assign$/);
             if (req.method === 'POST' && assignMatch) {
               console.log('[admin-api] ROUTE', 'designation_review/:id/assign (POST)')
               const reviewId = assignMatch[1];
@@ -487,7 +566,7 @@ serve(async (req) => {
             }
 
             // POST /admin/appointments/:id/cancel
-            const cancelApptMatch = path.match(/\/admin\/appointments\/([^\/]+)\/cancel$/);
+            const cancelApptMatch = p.match(/\/admin\/appointments\/([^\/]+)\/cancel$/);
             if (req.method === 'POST' && cancelApptMatch) {
               console.log('[admin-api] ROUTE', 'admin/appointments/:id/cancel')
               const apptId = cancelApptMatch[1];
