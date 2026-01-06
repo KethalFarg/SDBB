@@ -253,16 +253,22 @@ export function BookingCenter() {
       };
 
       const [availRes, apptsRes] = await Promise.all([
-        fetch(`${baseUrl}/availability?date=${selectedDate}`, { 
+        fetch(`${baseUrl}/availability?date=${selectedDate}&practice_id=${selectedPractice}`, { 
           headers: { ...headers, 'x-practice-id': selectedPractice } 
         }),
-        fetch(`${baseUrl}/appointments?date=${selectedDate}`, { 
+        fetch(`${baseUrl}/appointments?date=${selectedDate}&practice_id=${selectedPractice}`, { 
           headers: { ...headers, 'x-practice-id': selectedPractice } 
         })
       ]);
 
-      if (!availRes.ok) throw new Error(`Availability fetch failed: ${availRes.statusText}`);
-      if (!apptsRes.ok) throw new Error(`Appointments fetch failed: ${apptsRes.statusText}`);
+      if (!availRes.ok) {
+        const errJson = await availRes.json().catch(() => ({}));
+        throw new Error(`Availability fetch failed: ${availRes.status} ${errJson.error || availRes.statusText}`);
+      }
+      if (!apptsRes.ok) {
+        const errJson = await apptsRes.json().catch(() => ({}));
+        throw new Error(`Appointments fetch failed: ${apptsRes.status} ${errJson.error || apptsRes.statusText}`);
+      }
 
       const availJson = await availRes.json();
       const apptsJson = await apptsRes.json();
