@@ -8,6 +8,7 @@ import { LeadsList } from './pages/LeadsList';
 import { PracticeOnboarding } from './pages/PracticeOnboarding';
 import { PracticeAccess } from './pages/PracticeAccess';
 import { BookingCenter } from './pages/BookingCenter';
+import { Messages } from './pages/Messages';
 import { Dashboard } from './pages/Dashboard';
 import { supabase } from './lib/supabase';
 import { AdminLayout } from './components/AdminLayout';
@@ -82,6 +83,11 @@ export default function App() {
         <Route path="/admin/bookings" element={
           <PrivateRoute>
             <BookingCenter />
+          </PrivateRoute>
+        } />
+        <Route path="/admin/messages" element={
+          <PrivateRoute>
+            <Messages />
           </PrivateRoute>
         } />
         <Route path="*" element={<Navigate to="/admin/dashboard" />} />
