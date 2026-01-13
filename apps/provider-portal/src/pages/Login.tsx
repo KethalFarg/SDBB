@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { AlertTriangle } from 'lucide-react';
 import { supabase, envMissing } from '../supabaseClient';
 import { useSession } from '../hooks/useSession';
 
@@ -34,26 +33,6 @@ export function Login() {
   return (
     <div className="login-container">
       <div className="login-card">
-        {/* Migration Banner */}
-        <div style={{ 
-          backgroundColor: 'var(--color-action)', 
-          color: 'white', 
-          padding: '1rem', 
-          borderRadius: 'var(--radius-sm)', 
-          marginBottom: '2rem',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '1rem',
-          fontSize: '0.9375rem',
-          lineHeight: '1.4',
-          boxShadow: '0 4px 12px rgba(255, 107, 107, 0.2)'
-        }}>
-          <AlertTriangle size={24} style={{ flexShrink: 0 }} />
-          <span>
-            This page is moving <strong>1/12/26</strong>. For future logins to the provider portal, please click <strong>Provider Login</strong> in the footer of the main site.
-          </span>
-        </div>
-
         <div className="login-header">
           <img 
             src="https://imagedelivery.net/ye6TBwd9tSy8dGYL2VHjgg/fdd5f772-73a3-4208-fd11-f03e2a90eb00/public" 
