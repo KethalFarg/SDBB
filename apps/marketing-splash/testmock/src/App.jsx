@@ -4,13 +4,13 @@ import { ChevronDown, ChevronRight, Quote, MapPin, Search, Activity, CheckCircle
 const Header = () => {
   return (
     <header className="fixed top-10 left-0 right-0 bg-white/95 backdrop-blur-md z-50 py-1 border-b border-gray-100 transition-all duration-300">
-      <div className="max-w-[1400px] mx-auto px-6 lg:px-12">
-        <div className="flex justify-between items-center h-20">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12">
+        <div className="flex justify-between items-center h-16 sm:h-20">
           <div className="flex items-center flex-shrink-0 cursor-pointer group">
             <img 
               src="https://imagedelivery.net/ye6TBwd9tSy8dGYL2VHjgg/fd74b3aa-c3d4-4188-fd65-604349f96400/public" 
               alt="Spinal Decompression Logo" 
-              className="h-14 w-auto object-contain transition-transform group-hover:scale-[1.02] duration-300"
+              className="h-10 sm:h-14 w-auto object-contain transition-transform group-hover:scale-[1.02] duration-300"
             />
           </div>
 
@@ -35,7 +35,7 @@ const Header = () => {
           </nav>
 
           <div className="flex-shrink-0">
-            <button className="bg-gradient-to-r from-[#004b5c] to-[#176c80] text-white px-8 py-3 rounded-full font-bold text-[15px] hover:shadow-xl transition-all duration-300 shadow-md shadow-[#014c5d]/10">
+            <button className="bg-gradient-to-r from-[#004b5c] to-[#176c80] text-white px-4 sm:px-8 py-2 sm:py-3 rounded-full font-bold text-[13px] sm:text-[15px] hover:shadow-xl transition-all duration-300 shadow-md shadow-[#014c5d]/10">
               Book Online
             </button>
           </div>
@@ -155,73 +155,78 @@ const ComparisonSection = () => {
 
 const UnifiedProcessSection = () => {
   return (
-    <section className="bg-[#f0f9fa] py-24 lg:py-32">
-      <div className="max-w-[1400px] mx-auto px-6 lg:px-12 space-y-32">
-        <div className="bg-[#f8fafb] rounded-[48px] p-12 lg:p-20 shadow-2xl shadow-[#014c5d]/5 border border-[#014c5d]/10">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
-            <div>
-              <h2 className="text-[42px] lg:text-[48px] font-bold text-[#014c5d] leading-[1.1] mb-4 tracking-tight">See If There's a Preferred Provider Near You</h2>
+    <section className="bg-[#f0f9fa] py-16 lg:py-32">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 space-y-16 lg:space-y-32">
+        <div className="bg-[#f8fafb] rounded-[32px] lg:rounded-[48px] p-6 lg:p-20 shadow-xl lg:shadow-2xl shadow-[#014c5d]/5 border border-[#014c5d]/10">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+            <div className="text-center lg:text-left">
+              <h2 className="text-[32px] lg:text-[48px] font-bold text-[#014c5d] leading-[1.1] mb-6 lg:mb-4 tracking-tight">See If There's a Preferred Provider Near You</h2>
               <img 
                 src="https://imagedelivery.net/ye6TBwd9tSy8dGYL2VHjgg/a5f726ad-956d-4f72-6a7d-3414c929c100/public" 
                 alt="Nationwide provider network" 
-                className="w-full max-w-[400px] h-auto mb-8 rounded-2xl"
+                className="w-full max-w-[300px] lg:max-w-[400px] h-auto mx-auto lg:mx-0 mb-8 rounded-2xl shadow-lg"
               />
-              <div className="w-24 h-1 bg-[#0496b0]/40 rounded-full mb-8"></div>
-              <p className="text-[20px] text-gray-600 leading-relaxed mb-8">Not every clinic meets our standards. Enter your zip code to check if a credentialed provider is available in your area.</p>
-              <div className="flex items-center gap-4 text-[#014c5d] font-bold text-lg"><div className="w-2 h-2 rounded-full bg-[#014c5d]"></div><span>Nationwide Network of Certified Clinics</span></div>
+              <div className="hidden lg:block w-24 h-1 bg-[#0496b0]/40 rounded-full mb-8"></div>
+              <p className="text-[18px] lg:text-[20px] text-gray-600 leading-relaxed mb-8">Not every clinic meets our standards. Enter your zip code to check if a credentialed provider is available in your area.</p>
+              <div className="flex items-center justify-center lg:justify-start gap-4 text-[#014c5d] font-bold text-lg">
+                <div className="w-2 h-2 rounded-full bg-[#014c5d]"></div>
+                <span className="text-sm lg:text-lg">Nationwide Network of Certified Clinics</span>
+              </div>
             </div>
-            <div className="bg-white p-8 lg:p-10 rounded-[32px] border-[3px] border-[#014c5d] shadow-[inset_0_4px_25px_rgba(1,76,93,0.04),0_20px_40px_rgba(1,76,93,0.05)]">
-              <form className="space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="bg-white p-6 lg:p-10 rounded-[24px] lg:rounded-[32px] border-[2px] lg:border-[3px] border-[#014c5d] shadow-lg">
+              <form className="space-y-4 lg:space-y-6">
+                <div className="grid grid-cols-2 gap-4 lg:gap-6">
                   <div>
-                    <label className="block text-sm font-bold text-[#014c5d] uppercase tracking-wider mb-2">First Name</label>
-                    <input type="text" placeholder="John" className="w-full px-5 py-4 rounded-full border border-[#014c5d]/30 bg-white shadow-sm focus:border-[#014c5d] outline-none text-gray-700 transition-all" />
+                    <label className="block text-[10px] lg:text-sm font-bold text-[#014c5d] uppercase tracking-wider mb-1.5">First Name*</label>
+                    <input type="text" placeholder="John" className="w-full px-4 lg:px-5 py-3 lg:py-4 rounded-full border border-[#014c5d]/20 bg-white text-sm lg:text-base outline-none focus:border-[#014c5d] transition-all" />
                   </div>
                   <div>
-                    <label className="block text-sm font-bold text-[#014c5d] uppercase tracking-wider mb-2">Last Name</label>
-                    <input type="text" placeholder="Doe" className="w-full px-5 py-4 rounded-full border border-[#014c5d]/30 bg-white shadow-sm focus:border-[#014c5d] outline-none text-gray-700 transition-all" />
+                    <label className="block text-[10px] lg:text-sm font-bold text-[#014c5d] uppercase tracking-wider mb-1.5">Last Name*</label>
+                    <input type="text" placeholder="Doe" className="w-full px-4 lg:px-5 py-3 lg:py-4 rounded-full border border-[#014c5d]/20 bg-white text-sm lg:text-base outline-none focus:border-[#014c5d] transition-all" />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-[#014c5d] uppercase tracking-wider mb-2">Email Address</label>
-                  <input type="email" placeholder="john@example.com" className="w-full px-5 py-4 rounded-full border border-[#014c5d]/30 bg-white shadow-sm focus:border-[#014c5d] outline-none text-gray-700 transition-all" />
+                  <label className="block text-[10px] lg:text-sm font-bold text-[#014c5d] uppercase tracking-wider mb-1.5">Email Address*</label>
+                  <input type="email" placeholder="john@example.com" className="w-full px-4 lg:px-5 py-3 lg:py-4 rounded-full border border-[#014c5d]/20 bg-white text-sm lg:text-base outline-none focus:border-[#014c5d] transition-all" />
                 </div>
                 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6">
                   <div>
-                    <label className="block text-sm font-bold text-[#014c5d] uppercase tracking-wider mb-2">Phone Number</label>
+                    <label className="block text-[10px] lg:text-sm font-bold text-[#014c5d] uppercase tracking-wider mb-1.5">Phone Number*</label>
                     <div className="relative">
-                      <input type="tel" placeholder="(555) 000-0000" className="w-full pl-12 pr-5 py-4 rounded-full border border-[#014c5d]/30 bg-white shadow-sm focus:border-[#014c5d] outline-none text-gray-700 transition-all" />
-                      <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                      <input type="tel" placeholder="(555) 000-0000" className="w-full pl-10 lg:pl-12 pr-4 py-3 lg:py-4 rounded-full border border-[#014c5d]/20 bg-white text-sm lg:text-base outline-none focus:border-[#014c5d] transition-all" />
+                      <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 lg:w-5 lg:h-5" />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-bold text-[#014c5d] uppercase tracking-wider mb-2">Zip Code</label>
+                    <label className="block text-[10px] lg:text-sm font-bold text-[#014c5d] uppercase tracking-wider mb-1.5">Zip Code*</label>
                     <div className="relative">
-                      <input type="text" placeholder="Enter Zip Code" className="w-full pl-12 pr-5 py-4 rounded-full border border-[#014c5d]/30 bg-white shadow-sm focus:border-[#014c5d] outline-none text-gray-700 transition-all" /><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                      <input type="text" placeholder="Enter Zip" className="w-full pl-10 lg:pl-12 pr-4 py-3 lg:py-4 rounded-full border border-[#014c5d]/20 bg-white text-sm lg:text-base outline-none focus:border-[#014c5d] transition-all" />
+                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 lg:w-5 lg:h-5" />
                     </div>
                   </div>
                 </div>
 
-                <div className="flex gap-4 items-start">
-                  <div className="mt-1 relative flex items-center">
+                <div className="flex gap-3 items-start pt-2">
+                  <div className="mt-1 relative flex items-center shrink-0">
                     <input 
                       type="checkbox" 
                       id="sms-consent" 
-                      className="peer appearance-none w-5 h-5 border-2 border-[#014c5d]/30 rounded bg-white checked:bg-[#014c5d] checked:border-[#014c5d] cursor-pointer transition-all"
+                      className="peer appearance-none w-4 h-4 lg:w-5 lg:h-5 border-2 border-[#014c5d]/30 rounded bg-white checked:bg-[#014c5d] checked:border-[#014c5d] cursor-pointer transition-all"
                     />
-                    <CheckCircle2 className="absolute w-5 h-5 text-white opacity-0 peer-checked:opacity-100 pointer-events-none transition-opacity p-0.5" />
+                    <CheckCircle2 className="absolute w-4 h-4 lg:w-5 lg:h-5 text-white opacity-0 peer-checked:opacity-100 pointer-events-none transition-opacity p-0.5" />
                   </div>
-                  <label htmlFor="sms-consent" className="text-[12px] leading-relaxed text-gray-500 cursor-pointer select-none">
-                    By checking this box, I agree to be contacted via phone or text (SMS) by SpinalDecompression.com or participating providers with information about spine-specific rehabilitation services, provider availability, and appointment scheduling at this phone number using automated technology. I understand that consent is not a condition of receiving care, and that message and data rates may apply. Msg freq varies. I also understand I may reply "STOP" to opt out and "HELP" for help. <a href="#" className="text-[#f2674b] font-bold hover:underline">View our Privacy Policy and Terms of Use</a>. This site is protected by reCAPTCHA and the Google <a href="#" className="text-[#f2674b] font-bold hover:underline">Privacy Policy</a> and <a href="#" className="text-[#f2674b] font-bold hover:underline">Terms of Service</a> apply.
+                  <label htmlFor="sms-consent" className="text-[10px] lg:text-[12px] leading-snug text-gray-500 cursor-pointer select-none">
+                    I agree to be contacted via phone or text (SMS) by SpinalDecompression.com with information about services and provider availability. Msg/data rates may apply. <a href="#" className="text-[#f2674b] font-bold hover:underline">Privacy Policy</a> apply.
                   </label>
                 </div>
 
-                <button className="w-full bg-gradient-to-r from-[#004b5c] to-[#176c80] text-white py-5 rounded-full font-bold text-[18px] hover:shadow-xl transition-all duration-300 shadow-lg shadow-[#014c5d]/10 mt-4">Find Your Provider</button>
+                <button className="w-full bg-gradient-to-r from-[#004b5c] to-[#176c80] text-white py-4 lg:py-5 rounded-full font-bold text-[16px] lg:text-[18px] hover:shadow-xl transition-all duration-300 shadow-lg shadow-[#014c5d]/10 mt-4">Find Your Provider</button>
               </form>
             </div>
           </div>
         </div>
+        {/* ... rest of existing UnifiedProcessSection ... */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
           <div className="relative">
             <div className="relative rounded-[40px] overflow-hidden shadow-2xl group">
@@ -634,8 +639,8 @@ function App() {
       <div className="pointer-events-none select-none">
         <Header />
         <main className="w-full">
-          {/* Padding top to account for the fixed header + banner */}
-          <div className="pt-10">
+          {/* Padding top to account for fixed top banner (h-10) + header (h-16/20) */}
+          <div className="pt-28 sm:pt-32">
             <Hero />
             <ComparisonSection />
             <UnifiedProcessSection />
@@ -652,18 +657,18 @@ function App() {
         <Footer />
         
         {/* Spacer for bottom banner */}
-        <div className="h-24 bg-transparent" />
+        <div className="h-32 sm:h-24 bg-transparent" />
       </div>
 
       {/* 4. BOTTOM STICKY BAR (Interactive) */}
-      <div className="fixed bottom-0 left-0 right-0 bg-[#031E2C] border-t border-white/10 py-4 px-6 z-[200] flex flex-col sm:flex-row items-center justify-center gap-4 shadow-[0_-10px_50px_rgba(0,0,0,0.5)]">
+      <div className="fixed bottom-0 left-0 right-0 bg-[#031E2C]/95 backdrop-blur-md border-t border-white/10 py-4 px-6 z-[200] flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 shadow-[0_-10px_50px_rgba(0,0,0,0.5)]">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-[#f2674b] animate-pulse"></div>
-          <span className="text-white/50 text-xs font-bold uppercase tracking-widest">Are you a provider?</span>
+          <span className="text-white/50 text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em]">Are you a provider?</span>
         </div>
         <a 
           href="https://portal.spinaldecompression.com" 
-          className="pointer-events-auto bg-gradient-to-r from-[#004b5c] to-[#176c80] hover:from-[#f2674b] hover:to-[#f2674b] text-white px-8 py-2 rounded-full font-bold text-sm transition-all duration-300 shadow-lg border border-white/10"
+          className="pointer-events-auto bg-gradient-to-r from-[#004b5c] to-[#176c80] hover:from-[#f2674b] hover:to-[#f2674b] text-white px-6 sm:px-8 py-2 sm:py-2.5 rounded-full font-bold text-[12px] sm:text-sm transition-all duration-300 shadow-lg border border-white/10"
         >
           Access Provider Portal
         </a>
