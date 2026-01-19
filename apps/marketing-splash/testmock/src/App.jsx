@@ -627,13 +627,13 @@ function App() {
     <div className="relative w-full min-h-screen bg-white font-sans selection:bg-[#014c5d]/20 selection:text-[#014c5d]">
       
       {/* 1. TOP STICKY BANNER */}
-      <div className="fixed top-0 left-0 right-0 h-10 bg-black text-white flex items-center justify-center text-[11px] sm:text-[13px] font-black tracking-[0.2em] z-[200] shadow-md uppercase">
+      <div className="fixed top-0 left-0 right-0 h-10 bg-black text-white flex items-center justify-center text-[10px] sm:text-[12px] tracking-[0.2em] z-[200] shadow-md uppercase">
         <div className="flex items-center gap-3">
-          <div className="relative flex h-3 w-3">
+          <div className="relative flex h-2.5 w-2.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#0496b0] opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-[#0496b0]"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#0496b0]"></span>
           </div>
-          <span>system upload complete - standing by</span>
+          <span className="font-medium text-white/80">system upload complete — <span className="font-black text-white">standing by</span></span>
         </div>
       </div>
 
