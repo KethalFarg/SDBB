@@ -637,19 +637,21 @@ function App() {
             content: '';
             animation: dots 2s linear infinite;
           }
-          @keyframes dots {
-            0% { content: ''; }
-            10% { content: '.'; }
-            20% { content: '..'; }
-            30% { content: '...'; }
-            40% { content: '....'; }
-            50% { content: '.....'; }
-            60% { content: '......'; }
-            70% { content: '.......'; }
-            80% { content: '........'; }
-            90% { content: '.........'; }
-            100% { content: ''; }
-          }
+            @keyframes dots {
+              0% { content: ''; }
+              8% { content: '.'; }
+              16% { content: '..'; }
+              25% { content: '...'; }
+              33% { content: '....'; }
+              41% { content: '.....'; }
+              50% { content: '......'; }
+              58% { content: '.......'; }
+              66% { content: '........'; }
+              75% { content: '.........'; }
+              83% { content: '..........'; }
+              91% { content: '...........'; }
+              100% { content: '............'; }
+            }
         `}</style>
       </div>
 

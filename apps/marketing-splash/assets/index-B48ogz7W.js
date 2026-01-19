@@ -152,17 +152,19 @@ Error generating stack: `+i.message+`
             content: '';
             animation: dots 2s linear infinite;
           }
-          @keyframes dots {
-            0% { content: ''; }
-            10% { content: '.'; }
-            20% { content: '..'; }
-            30% { content: '...'; }
-            40% { content: '....'; }
-            50% { content: '.....'; }
-            60% { content: '......'; }
-            70% { content: '.......'; }
-            80% { content: '........'; }
-            90% { content: '.........'; }
-            100% { content: ''; }
-          }
+            @keyframes dots {
+              0% { content: ''; }
+              8% { content: '.'; }
+              16% { content: '..'; }
+              25% { content: '...'; }
+              33% { content: '....'; }
+              41% { content: '.....'; }
+              50% { content: '......'; }
+              58% { content: '.......'; }
+              66% { content: '........'; }
+              75% { content: '.........'; }
+              83% { content: '..........'; }
+              91% { content: '...........'; }
+              100% { content: '............'; }
+            }
         `})]}),s.jsx("div",{className:"fixed inset-0 bg-slate-950/40 backdrop-blur-[2px] z-[100] pointer-events-none"}),s.jsxs("div",{className:"pointer-events-none select-none",children:[s.jsx(tp,{}),s.jsx("main",{className:"w-full",children:s.jsxs("div",{className:"pt-28 sm:pt-32",children:[s.jsx(np,{}),s.jsx(lp,{}),s.jsx(ip,{}),s.jsx(op,{}),s.jsx(sp,{}),s.jsx(ap,{}),s.jsx(up,{}),s.jsx(cp,{}),s.jsx(dp,{}),s.jsx(fp,{}),s.jsx(pp,{})]})}),s.jsx(hp,{}),s.jsx("div",{className:"h-32 sm:h-24 bg-transparent"})]}),s.jsxs("div",{className:"fixed bottom-0 left-0 right-0 bg-[#031E2C]/95 backdrop-blur-md border-t border-white/10 py-4 px-6 z-[200] flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 shadow-[0_-10px_50px_rgba(0,0,0,0.5)]",children:[s.jsxs("div",{className:"flex items-center gap-2",children:[s.jsx("div",{className:"w-2 h-2 rounded-full bg-[#f2674b] animate-pulse"}),s.jsx("span",{className:"text-white/50 text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em]",children:"Are you a provider?"})]}),s.jsx("a",{href:"https://portal.spinaldecompression.com",className:"pointer-events-auto bg-gradient-to-r from-[#004b5c] to-[#176c80] hover:from-[#f2674b] hover:to-[#f2674b] text-white px-6 sm:px-8 py-2 sm:py-2.5 rounded-full font-bold text-[12px] sm:text-sm transition-all duration-300 shadow-lg border border-white/10",children:"Access Provider Portal"})]})]})}Kl.createRoot(document.getElementById("root")).render(s.jsx(jc.StrictMode,{children:s.jsx(gp,{})}));
