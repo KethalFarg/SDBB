@@ -627,8 +627,30 @@ function App() {
     <div className="relative w-full min-h-screen bg-white font-sans selection:bg-[#014c5d]/20 selection:text-[#014c5d]">
       
       {/* 1. TOP STICKY BANNER */}
-      <div className="fixed top-0 left-0 right-0 h-10 bg-[#f2674b] text-white flex items-center justify-center text-[11px] sm:text-[13px] font-black tracking-[0.2em] z-[200] shadow-md uppercase">
-        Site Currently Updating — System Preview Mode
+      <div className="fixed top-0 left-0 right-0 h-10 bg-black text-white flex items-center justify-center text-[11px] sm:text-[13px] font-black tracking-[0.2em] z-[200] shadow-md uppercase">
+        <div className="flex items-center">
+          <span>system upload complete - standing by</span>
+          <span className="dots-container ml-1"></span>
+        </div>
+        <style>{`
+          .dots-container::after {
+            content: '';
+            animation: dots 2s linear infinite;
+          }
+          @keyframes dots {
+            0% { content: ''; }
+            10% { content: '.'; }
+            20% { content: '..'; }
+            30% { content: '...'; }
+            40% { content: '....'; }
+            50% { content: '.....'; }
+            60% { content: '......'; }
+            70% { content: '.......'; }
+            80% { content: '........'; }
+            90% { content: '.........'; }
+            100% { content: ''; }
+          }
+        `}</style>
       </div>
 
       {/* 2. GLASS OVERLAY (Visual only) */}
