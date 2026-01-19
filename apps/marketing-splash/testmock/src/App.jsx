@@ -628,31 +628,13 @@ function App() {
       
       {/* 1. TOP STICKY BANNER */}
       <div className="fixed top-0 left-0 right-0 h-10 bg-black text-white flex items-center justify-center text-[11px] sm:text-[13px] font-black tracking-[0.2em] z-[200] shadow-md uppercase">
-        <div className="flex items-center">
+        <div className="flex items-center gap-3">
+          <div className="relative flex h-3 w-3">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#0496b0] opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-[#0496b0]"></span>
+          </div>
           <span>system upload complete - standing by</span>
-          <span className="dots-container ml-1"></span>
         </div>
-        <style>{`
-          .dots-container::after {
-            content: '';
-            animation: dots 2s linear infinite;
-          }
-            @keyframes dots {
-              0% { content: ''; }
-              8% { content: '.'; }
-              16% { content: '..'; }
-              25% { content: '...'; }
-              33% { content: '....'; }
-              41% { content: '.....'; }
-              50% { content: '......'; }
-              58% { content: '.......'; }
-              66% { content: '........'; }
-              75% { content: '.........'; }
-              83% { content: '..........'; }
-              91% { content: '...........'; }
-              100% { content: '............'; }
-            }
-        `}</style>
       </div>
 
       {/* 2. GLASS OVERLAY (Visual only) */}
