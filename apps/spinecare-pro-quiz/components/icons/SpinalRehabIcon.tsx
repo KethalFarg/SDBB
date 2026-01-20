@@ -30,7 +30,7 @@ const SpinalRehabIcon: React.FC<{ className?: string }> = ({ className = "w-full
                 <img
                     src="https://imagedelivery.net/ye6TBwd9tSy8dGYL2VHjgg/44539b0f-20a6-466d-fda3-7dacef32a900/public"
                     alt="Spinal rehabilitation isn't about force"
-                    className="w-full max-w-[280px] sm:max-w-[350px] md:max-w-[450px] h-auto object-contain opacity-95 z-10 drop-shadow-[0_10px_30px_rgba(0,0,0,0.3)] border border-white/5 rounded-xl md:rounded-2xl"
+                    className="w-full max-w-[180px] sm:max-w-[350px] md:max-w-[450px] h-auto object-contain opacity-95 z-10 drop-shadow-[0_10px_30px_rgba(0,0,0,0.3)] border border-white/5 rounded-xl md:rounded-2xl"
                 />
             </div>
 
