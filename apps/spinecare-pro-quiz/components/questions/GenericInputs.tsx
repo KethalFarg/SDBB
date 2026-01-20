@@ -123,12 +123,6 @@ export const YesNo: React.FC<Props> = ({ config }) => {
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-md mx-auto">
-      {questionText !== config.question && (
-        <h2 className={`text-2xl md:text-3xl font-bold text-center leading-tight mt-6 md:mt-8 mb-2 ${isLight ? 'text-brand-dark' : 'text-white'}`}>
-          {questionText}
-        </h2>
-      )}
-
       {config.componentProps?.VisualComponent && (
         <div className="w-full flex justify-center py-4">
           <config.componentProps.VisualComponent className="w-full h-auto max-h-48 text-[#0590a8]" />

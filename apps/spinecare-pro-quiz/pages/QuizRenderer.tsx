@@ -19,6 +19,7 @@ import { NameEmailCapture } from '../components/forms/NameEmailCapture';
 import { QuestionConfig } from '../types';
 import StickyReportButton from '../components/results/PainProfile/StickyReportButton';
 import StickyBottomSection from '../components/results/FinalReport/StickyBottomSection';
+import { ArrowRight } from 'lucide-react';
 
 // Reusable Background Component (Dark Theme)
 const Background: React.FC = () => (
@@ -89,6 +90,18 @@ export const QuizRenderer: React.FC = () => {
   // Explicitly ALLOWED now: info-slide
   const showHeader = !isResultScreen && config.type !== 'loading' && config.id !== 'gender' && config.type !== 'phone-capture' && config.type !== 'pain-profile' && config.type !== 'gender-landing' && config.type !== 'medical-exit' && !(config.type === 'form' && config.componentProps?.formType === 'name-email');
 
+  // Logic for global "Continue" button
+  const showGlobalFooter = config.type !== 'gender-landing' && 
+                          config.type !== 'loading' && 
+                          config.type !== 'pain-profile' && 
+                          config.type !== 'final-report' && 
+                          config.type !== 'form' && 
+                          config.type !== 'medical-exit' &&
+                          config.type !== 'info-slide' &&
+                          !config.autoAdvance;
+
+  const { handleAnswer, nextQuestion } = useQuiz();
+
   return (
     <div className={`h-[100dvh] relative font-sans overflow-hidden flex flex-col transition-colors duration-700 ${isLightTheme ? 'bg-[#d3e6e8] text-brand-dark' : 'text-white'}`}>
 
@@ -97,31 +110,39 @@ export const QuizRenderer: React.FC = () => {
 
       {showHeader && <Header />}
 
-      <main className={`relative z-10 w-full ${config.type === 'pain-profile' || config.type === 'final-report' || config.type === 'gender-landing' || (config.type === 'form' && config.componentProps?.formType === 'name-email') ? 'max-w-full' : 'max-w-2xl mx-auto px-4 sm:px-6'} flex-1 flex flex-col overflow-y-auto ${config.type === 'gender-landing'
-        ? 'py-0'
-        : showHeader
-          ? 'pt-24 sm:pt-28 pb-4 sm:pb-6'
-          : 'justify-center py-6'
-        }`}>
-        <div key={config.id} className="animate-fade-in flex flex-col h-full">
-          {/* Question Text Header (Hide for Info Slides/Results/Loading/Phone/Empty Question) */}
+      <main className={`relative z-10 w-full ${config.type === 'pain-profile' || config.type === 'final-report' || config.type === 'gender-landing' || (config.type === 'form' && config.componentProps?.formType === 'name-email') ? 'max-w-full px-0' : 'max-w-2xl mx-auto px-4 sm:px-6'} flex-1 flex flex-col min-h-0`}>
+        <div key={config.id} className="animate-fade-in flex flex-col flex-1 justify-center py-4 sm:py-8">
+          {/* Question Text Header */}
           {(!isResultScreen && config.question && config.type !== 'loading' && config.type !== 'info-slide' && config.type !== 'medical-exit' && config.type !== 'phone-capture' && config.type !== 'pain-profile' && config.type !== 'gender-landing') && (
-            <div className="text-center mb-4 sm:mb-8 md:mb-10 mt-1 sm:mt-6 md:mt-8 flex-shrink-0">
-              <h1 className={`text-xl sm:text-2xl md:text-3xl font-bold mb-1 sm:mb-3 leading-tight ${isLightTheme ? 'text-brand-dark' : 'text-white drop-shadow-md'}`}>
+            <div className="text-center mb-6 sm:mb-10 md:mb-12 mt-2 sm:mt-6 flex-shrink-0">
+              <h1 className={`text-2xl sm:text-3xl md:text-4xl font-black uppercase tracking-tight mb-2 sm:mb-4 leading-tight ${isLightTheme ? 'text-brand-dark' : 'text-white drop-shadow-md'}`}>
                 {config.question}
               </h1>
               {config.subtext && (
-                <p className={`font-medium text-sm sm:text-base md:text-lg ${isLightTheme ? 'text-gray-500' : 'text-brand-lightTeal'}`}>
+                <p className={`font-bold text-xs sm:text-sm md:text-base uppercase tracking-widest opacity-70 px-4 ${isLightTheme ? 'text-gray-500' : 'text-brand-lightTeal'}`}>
                   {config.subtext}
                 </p>
               )}
             </div>
           )}
 
-          {/* Component Wrapper */}
-          <div className="flex-1 flex flex-col justify-start min-h-0">
+          {/* Component Wrapper - Center the answer blocks */}
+          <div className="flex-1 flex flex-col justify-center min-h-0 px-2 sm:px-4">
             {renderComponent(config)}
           </div>
+
+          {/* Global Footer Button Area - Pinned to bottom of the content container */}
+          {showGlobalFooter && (
+            <div className="mt-auto pt-8 flex justify-center pb-4 sm:pb-8 flex-shrink-0">
+              <button
+                onClick={() => nextQuestion()}
+                disabled={config.multiSelect && (!state.answers[config.id] || (state.answers[config.id] as any[]).length === 0)}
+                className={`px-10 py-4 rounded-full font-black text-lg uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-3 bg-[#fa684b] text-white border-2 border-white/20 hover:bg-[#e55d43] hover:shadow-[#fa684b]/20 disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed disabled:hover:scale-100`}
+              >
+                Continue <ArrowRight size={22} />
+              </button>
+            </div>
+          )}
         </div>
       </main>
 
