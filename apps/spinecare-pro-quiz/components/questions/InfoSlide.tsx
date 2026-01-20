@@ -61,11 +61,11 @@ export const InfoSlide: React.FC<Props> = ({ config }) => {
 
         {/* Visual Area */}
         {config.componentProps?.VisualComponent ? (
-          <div className="w-full h-32 sm:h-48 md:h-64 mb-4 sm:mb-6 flex items-center justify-center p-4">
-            <config.componentProps.VisualComponent className="w-full h-full text-brand-lightTeal opacity-90" />
+          <div className="w-full min-h-[14rem] sm:min-h-[18rem] md:min-h-[22rem] mb-4 sm:mb-6 flex items-center justify-center p-2 sm:p-4">
+            <config.componentProps.VisualComponent className="w-full h-full text-brand-lightTeal opacity-95" />
           </div>
         ) : config.componentProps?.image && (
-          <div className="w-full h-40 sm:h-48 md:h-64 mb-4 sm:mb-6 rounded-2xl overflow-hidden shadow-lg flex-shrink-0 relative bg-gray-900 border border-white/10">
+          <div className="w-full min-h-[12rem] sm:min-h-[16rem] md:min-h-[20rem] mb-4 sm:mb-6 rounded-2xl overflow-hidden shadow-lg flex-shrink-0 relative bg-gray-900 border border-white/10 mx-auto max-w-xl">
             <img
               src={config.componentProps.image}
               alt="Insight"
