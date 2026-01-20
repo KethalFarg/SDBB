@@ -442,7 +442,7 @@ export const QUIZ_CONFIG: QuestionConfig[] = [
         id: 'info-disc-rehab',
         theme: 'dark',
         type: 'info-slide',
-        question: "Spinal rehabilitation isn’t about force. It’s about response.",
+        question: "Spinal rehabilitation isn't about force. It's about response and adjustment.",
         subtext: "Spinal decompression uses computer-guided cycles tailored in real time to each patient — designed to reduce abnormal stress, restore motion, and improve how spinal tissues tolerate movement.",
         componentProps: {
             VisualComponent: SpinalRehabIcon,

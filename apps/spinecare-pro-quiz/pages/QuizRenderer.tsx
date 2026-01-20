@@ -143,7 +143,10 @@ export const QuizRenderer: React.FC = () => {
           <div className="max-w-2xl mx-auto flex justify-center pointer-events-auto">
             <button
               onClick={() => nextQuestion()}
-              disabled={config.multiSelect && (!state.answers[config.id] || (state.answers[config.id] as any[]).length === 0)}
+              disabled={
+                (config.multiSelect && (!state.answers[config.id] || (state.answers[config.id] as any[]).length === 0)) ||
+                (config.type === 'pain-slider' && state.answers[config.id] === undefined)
+              }
               className={`px-10 py-4 rounded-full font-black text-lg uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-3 bg-[#fa684b] text-white border-2 border-white/20 hover:bg-[#e55d43] hover:shadow-[#fa684b]/20 disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed disabled:hover:scale-100`}
             >
               Continue <ArrowRight size={22} />

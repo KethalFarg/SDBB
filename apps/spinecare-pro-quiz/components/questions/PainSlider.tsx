@@ -38,18 +38,15 @@ export const PainSlider: React.FC<Props> = ({ config }) => {
 
   return (
     <div className="w-full py-4 flex flex-col items-center">
-      {/* Pain Value Display with Vector Background */}
-      <div className={`relative w-64 mx-auto mb-8 ${config.id === 'worst-pain' ? 'aspect-[69/77]' : 'aspect-[52/71]'}`}>
+      {/* Pain Value Display with Vector Background - Reduced by ~20% (w-64 -> w-52) */}
+      <div className={`relative w-52 mx-auto mb-6 ${config.id === 'worst-pain' ? 'aspect-[69/77]' : 'aspect-[52/71]'}`}>
         <img
           src={config.id === 'worst-pain' ? "/pain2.svg" : "/pain1.svg"}
           alt=""
           className={`w-full h-full object-contain drop-shadow-xl transition-transform duration-300 ${config.id === 'worst-pain' ? '-translate-x-[19%] scale-[1.27]' : ''}`}
         />
 
-        {/* Overlay Text positioned on the white board area (approx top 33%) */}
-        {/* For pain2 (worst-pain), the box is slightly different, but the previous adjustments (top 34%, left 48%) were for pain1. 
-            Since we move the *image* for pain2 to align the box to the center, we keep the text centered in the container. 
-            We might need slight vertical tweak for pain2 if the box height differs. */}
+        {/* Overlay Text positioned on the white board area */}
         <div
           className={`absolute flex flex-col items-center justify-center z-10 ${config.id === 'worst-pain'
             ? 'top-[30%] left-[50%] w-[60%] h-[25%]' // Adjusted for Pain 2 
@@ -58,12 +55,12 @@ export const PainSlider: React.FC<Props> = ({ config }) => {
           style={{ transform: 'translateX(-50%)' }}
         >
           <span
-            className="text-6xl font-extrabold leading-none tracking-tight transition-colors duration-300"
+            className="text-5xl font-extrabold leading-none tracking-tight transition-colors duration-300"
             style={{ color: getColor(val) }}
           >
             {val}
           </span>
-          <span className={`text-xs font-bold uppercase tracking-widest mt-1 ${isLight ? 'text-gray-500' : 'text-gray-600'}`}>
+          <span className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${isLight ? 'text-gray-500' : 'text-gray-600'}`}>
             {getLabel(val)}
           </span>
         </div>
