@@ -24,9 +24,9 @@ export const GenderLanding: React.FC<GenderLandingProps> = ({ config }) => {
             {/* Main Background Gradient: Dark Teal (Left) -> Lighter Teal (Right) */}
             <div className="absolute inset-0 bg-gradient-to-r from-[#014B5C] via-[#0D5F73] to-[#1A7285] z-0" />
 
-            {/* Dramatic Lightening Effect on Right Column */}
-            <div className="absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-white/40 via-white/20 to-transparent z-0 pointer-events-none mix-blend-overlay" />
-            <div className="absolute inset-y-0 right-0 w-3/5 bg-gradient-to-l from-[#2D7A8C]/50 to-transparent z-0 pointer-events-none" />
+            {/* Dramatic Lightening Effect on Right Column - Desktop Only */}
+            <div className="absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-white/40 via-white/20 to-transparent z-0 pointer-events-none mix-blend-overlay hidden lg:block" />
+            <div className="absolute inset-y-0 right-0 w-3/5 bg-gradient-to-l from-[#2D7A8C]/50 to-transparent z-0 pointer-events-none hidden lg:block" />
 
             {/* Decorative Accents (Circles) */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden z-10">
