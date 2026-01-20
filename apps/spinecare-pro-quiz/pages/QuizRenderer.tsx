@@ -127,7 +127,7 @@ export const QuizRenderer: React.FC = () => {
           )}
 
           {/* Component Wrapper - Center the answer blocks */}
-          <div className="flex-1 flex flex-col justify-center min-h-0 px-2 sm:px-4">
+          <div className={`flex-1 flex flex-col justify-center min-h-0 ${config.type === 'gender-landing' ? 'px-0' : 'px-2 sm:px-4'}`}>
             {renderComponent(config)}
           </div>
 
