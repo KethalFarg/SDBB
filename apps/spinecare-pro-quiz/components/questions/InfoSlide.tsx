@@ -40,12 +40,14 @@ export const InfoSlide: React.FC<Props> = ({ config }) => {
       <div className="flex flex-col flex-1 z-10 relative">
 
         {/* Content Area - Headline (Title) First */}
-        <div className="flex flex-col items-center text-center justify-center px-4 pt-4 sm:pt-6 pb-2 sm:pb-4">
-          {!config.componentProps?.image && !isMcClure && !config.componentProps?.VisualComponent && (
-            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center mb-4 sm:mb-6 backdrop-blur-sm shadow-md bg-white/10 text-brand-lightTeal">
-              <span className="text-2xl sm:text-3xl">💡</span>
-            </div>
-          )}
+        <div className="flex flex-col items-center text-center justify-center px-4 pt-20 sm:pt-24 pb-2 sm:pb-4">
+          <div className="mb-4 sm:mb-6 flex justify-center">
+            <img 
+              src="https://imagedelivery.net/ye6TBwd9tSy8dGYL2VHjgg/cad90d3a-cd81-431a-ea37-9ce097649e00/public" 
+              alt="SpineCare Logo" 
+              className="h-6 sm:h-8 w-auto object-contain opacity-90" 
+            />
+          </div>
 
           <h2 className={`text-xl sm:text-2xl md:text-3xl font-black uppercase tracking-tight leading-tight ${isLight ? 'text-brand-dark' : 'text-white'}`}>
             {config.question}

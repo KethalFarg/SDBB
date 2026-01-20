@@ -30,9 +30,7 @@ export const Header: React.FC = () => {
 
         {/* Center: Current Section Label (Only if valid section) */}
         <div className="text-center pointer-events-none flex justify-center items-center">
-          {config?.type === 'info-slide' ? (
-            <img src="https://imagedelivery.net/ye6TBwd9tSy8dGYL2VHjgg/cad90d3a-cd81-431a-ea37-9ce097649e00/public" alt="SpineCare" className="h-8 w-auto object-contain" />
-          ) : isValidSection ? (
+          {isValidSection && config?.type !== 'info-slide' ? (
             <span className={`font-semibold text-lg tracking-wide uppercase opacity-90 ${isLight ? 'text-brand-dark' : 'text-white'}`}>
               {PROGRESS_SECTIONS.find(s => s.id === currentSectionId)?.label || ''}
             </span>
