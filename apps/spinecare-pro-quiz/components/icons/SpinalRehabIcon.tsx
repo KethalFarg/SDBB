@@ -92,7 +92,5 @@ const SpinalRehabIcon: React.FC<{ className?: string }> = ({ className = "w-full
         </div>
     );
 };
-};
-};
 
 export default SpinalRehabIcon;
