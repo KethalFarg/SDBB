@@ -20,7 +20,7 @@ export const GenderLanding: React.FC<GenderLandingProps> = ({ config }) => {
     };
 
     return (
-        <div className="min-h-screen w-full relative overflow-hidden flex flex-col bg-[#014B5C]">
+        <div className="h-full w-full relative overflow-hidden flex flex-col bg-[#014B5C]">
             {/* Main Background Gradient: Dark Teal (Left) -> Lighter Teal (Right) */}
             <div className="absolute inset-0 bg-gradient-to-r from-[#014B5C] via-[#0D5F73] to-[#1A7285] z-0" />
 

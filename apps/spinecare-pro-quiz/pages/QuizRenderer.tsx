@@ -111,7 +111,7 @@ export const QuizRenderer: React.FC = () => {
       {showHeader && <Header />}
 
       <main className={`relative z-10 w-full ${config.type === 'pain-profile' || config.type === 'final-report' || config.type === 'gender-landing' || (config.type === 'form' && config.componentProps?.formType === 'name-email') ? 'max-w-full px-0 pt-0' : 'max-w-2xl mx-auto px-4 sm:px-6 pt-[100px] sm:pt-[120px]'} flex-1 flex flex-col min-h-0`}>
-        <div key={config.id} className="animate-fade-in flex flex-col flex-1 justify-center py-4 sm:py-8">
+        <div key={config.id} className={`animate-fade-in flex flex-col flex-1 ${config.type === 'gender-landing' ? '' : 'justify-center py-4 sm:py-8'}`}>
           {/* Question Text Header */}
           {(!isResultScreen && config.question && config.type !== 'loading' && config.type !== 'info-slide' && config.type !== 'medical-exit' && config.type !== 'phone-capture' && config.type !== 'pain-profile' && config.type !== 'gender-landing') && (
             <div className="text-center mb-6 sm:mb-10 md:mb-12 mt-2 sm:mt-6 flex-shrink-0">
