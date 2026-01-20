@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import { QuestionConfig } from '../../types';
 import { useQuiz } from '../../context/QuizContext';
-import { ArrowRight } from 'lucide-react';
 
 const SHADOW_LIGHT = '5px 5px 10px rgba(1, 75, 92, 0.6), -4px -4px 8px rgba(255, 255, 255, 1)';
 
@@ -11,20 +10,16 @@ interface Props {
 }
 
 export const PainSlider: React.FC<Props> = ({ config }) => {
-  const { handleAnswer, nextQuestion, state } = useQuiz();
+  const { handleAnswer, state } = useQuiz();
   const existingAnswer = state.answers[config.id as keyof typeof state.answers] as number | undefined;
   const [val, setVal] = useState(existingAnswer !== undefined ? existingAnswer : 0);
-  const [hasInteracted, setHasInteracted] = useState(existingAnswer !== undefined);
   const isLight = config.theme === 'light';
 
-  const handleNext = () => {
-    handleAnswer(config.id as any, val);
-    nextQuestion();
-  };
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setVal(parseInt(e.target.value));
-    setHasInteracted(true);
+    const newVal = parseInt(e.target.value);
+    setVal(newVal);
+    // Save answer immediately so global button works
+    handleAnswer(config.id as any, newVal);
   }
 
   const getLabel = (v: number) => {
@@ -102,23 +97,6 @@ export const PainSlider: React.FC<Props> = ({ config }) => {
           <div className="flex flex-col items-center gap-1 pl-4"><span className={`h-2 w-px ${isLight ? 'bg-gray-300' : 'bg-white/30'}`} /><span>7</span></div>
           <div className="flex flex-col items-center gap-1"><span className={`h-2 w-px ${isLight ? 'bg-gray-300' : 'bg-white/30'}`} /><span>10</span></div>
         </div>
-      </div>
-
-      <div className={`w-full flex justify-center transition-opacity duration-300 ${hasInteracted ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-        <button
-          onClick={handleNext}
-          style={{
-            boxShadow: isLight
-              ? SHADOW_LIGHT
-              : undefined
-          }}
-          className={`w-full max-w-sm py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2 transition-all duration-300 ${isLight
-            ? 'bg-[#f2654a] text-white hover:bg-[#d9553b] hover:translate-y-[1px] active:shadow-inner'
-            : 'bg-white text-brand-teal hover:bg-brand-teal hover:text-white shadow-xl'
-            }`}
-        >
-          Continue <ArrowRight size={20} />
-        </button>
       </div>
     </div>
   );

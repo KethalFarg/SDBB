@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { QuestionConfig } from '../../types';
 import { useQuiz } from '../../context/QuizContext';
-import { ArrowRight, RotateCcw } from 'lucide-react';
 
 const SHADOW_LIGHT = '5px 5px 10px rgba(1, 75, 92, 0.6), -4px -4px 8px rgba(255, 255, 255, 1)';
 const SHADOW_PRESSED = 'inset 4px 4px 8px rgba(1, 75, 92, 0.4), inset -4px -4px 8px rgba(255, 255, 255, 0.9)';
@@ -46,13 +45,8 @@ export const BodyMapSelector: React.FC<WrapperProps> = ({ config }) => {
       }
     }
     setSelected(newSelected);
-  };
-
-  const handleContinue = () => {
-    handleAnswer(config.id as any, selected);
-    // Pass latest answers to nextQuestion to avoid state race condition
-    const nextAnswers = { ...state.answers, [config.id]: selected };
-    nextQuestion(nextAnswers);
+    // Save answer immediately so global button works
+    handleAnswer(config.id as any, newSelected);
   };
 
   return (
@@ -166,24 +160,6 @@ export const BodyMapSelector: React.FC<WrapperProps> = ({ config }) => {
             );
           })}
         </div>
-      </div>
-
-      {/* Continue Button - Centered Below */}
-      <div className={`mt-8 mb-8 w-full flex justify-center transition-all duration-500 transform ${selected.length > 0 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
-        <button
-          onClick={handleContinue}
-          style={{
-            boxShadow: isLight
-              ? SHADOW_LIGHT
-              : undefined
-          }}
-          className={`w-full max-w-sm py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all ${isLight
-            ? 'bg-[#f2654a] text-white hover:bg-[#d95238] hover:translate-y-[1px] active:shadow-inner'
-            : 'bg-[#f2654a] text-white hover:bg-[#d95238] shadow-xl'
-            }`}
-        >
-          Continue <ArrowRight size={20} />
-        </button>
       </div>
     </div>
   );

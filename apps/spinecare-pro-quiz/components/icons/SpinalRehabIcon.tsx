@@ -2,7 +2,7 @@ import React from 'react';
 
 const SpinalRehabIcon: React.FC<{ className?: string }> = ({ className = "w-full h-full" }) => {
     return (
-        <div className={`relative ${className} select-none flex flex-col items-center justify-center gap-2 sm:gap-4 md:gap-6`}>
+        <div className={`relative ${className} select-none flex flex-col items-center justify-center gap-4 sm:gap-6`}>
             <style dangerouslySetInnerHTML={{
                 __html: `
             @keyframes slide-infinite {
@@ -19,74 +19,73 @@ const SpinalRehabIcon: React.FC<{ className?: string }> = ({ className = "w-full
                 animation: slide-infinite 12s linear infinite;
             }
             .mask-linear-fade {
-                mask-image: linear-gradient(to right, transparent, black 15%, black 85%, transparent);
-                -webkit-mask-image: linear-gradient(to right, transparent, black 15%, black 85%, transparent);
+                mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+                -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
             }
         `}} />
 
-            {/* Main Image: Patient on Table - Centered */}
-            <div className="relative w-full flex justify-center items-center px-4">
-                <div className="absolute inset-0 bg-brand-lightTeal/5 blur-[40px] md:blur-[60px] rounded-full"></div>
+            {/* Main Image: Patient on Table */}
+            <div className="relative w-full flex justify-center items-center">
                 <img
                     src="https://imagedelivery.net/ye6TBwd9tSy8dGYL2VHjgg/44539b0f-20a6-466d-fda3-7dacef32a900/public"
-                    alt="Spinal rehabilitation isn't about force"
-                    className="w-full max-w-[180px] sm:max-w-[350px] md:max-w-[450px] h-auto object-contain opacity-95 z-10 drop-shadow-[0_10px_30px_rgba(0,0,0,0.3)] border border-white/5 rounded-xl md:rounded-2xl"
+                    alt="Spinal decompression table"
+                    className="w-full max-w-[280px] sm:max-w-[400px] h-auto object-contain opacity-95 drop-shadow-lg"
                 />
             </div>
 
-            {/* Animated Wave Dashboard - Minimalist, Transparent, White Lines */}
-            <div className="w-full max-w-md md:max-w-lg relative overflow-visible h-20 sm:h-24 md:h-28 flex flex-col items-center px-2 sm:px-4 mt-1 sm:mt-2">
-                <div className="w-full h-full bg-white/5 backdrop-blur-md rounded-xl md:rounded-2xl border border-white/10 p-2 sm:p-4 flex items-center relative overflow-hidden">
+            {/* Animated Wave Dashboard */}
+            <div className="w-full max-w-sm sm:max-w-md relative">
+                <div className="w-full h-24 sm:h-28 bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 p-3 sm:p-4 flex items-center relative overflow-hidden">
                     {/* Background Grid */}
-                    <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '15px 15px' }}></div>
+                    <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '12px 12px' }}></div>
 
                     {/* Labels - Left Side */}
-                    <div className="flex flex-col justify-center gap-1.5 sm:gap-3 z-20 pr-2 sm:pr-4 border-r border-white/10 min-w-[65px] sm:min-w-[80px]">
-                        <div className="flex items-center gap-1.5 sm:gap-2">
-                            <div className="w-2 h-0.5 bg-white opacity-40"></div>
-                            <span className="text-[8px] sm:text-[9px] font-black text-white tracking-widest uppercase opacity-40">Force</span>
+                    <div className="flex flex-col justify-center gap-2 sm:gap-3 z-20 pr-3 sm:pr-4 border-r border-white/20 min-w-[70px] sm:min-w-[80px]">
+                        <div className="flex items-center gap-2">
+                            <div className="w-3 h-0.5 bg-white/30"></div>
+                            <span className="text-[9px] sm:text-[10px] font-bold text-white/40 tracking-wider">FORCE</span>
                         </div>
-                        <div className="flex items-center gap-1.5 sm:gap-2">
-                            <div className="w-2 h-0.5 border-t border-dashed border-white"></div>
-                            <span className="text-[8px] sm:text-[9px] font-black text-white tracking-widest uppercase">Response</span>
+                        <div className="flex items-center gap-2">
+                            <div className="w-3 h-0.5 bg-white"></div>
+                            <span className="text-[9px] sm:text-[10px] font-bold text-white tracking-wider">RESPONSE</span>
                         </div>
-                        <div className="flex items-center gap-1.5 sm:gap-2">
-                            <div className="w-2 h-0.5 border-t-2 border-dotted border-white/30"></div>
-                            <span className="text-[8px] sm:text-[9px] font-black text-white tracking-widest uppercase opacity-20">Adjust</span>
+                        <div className="flex items-center gap-2">
+                            <div className="w-3 h-0.5 bg-white/20"></div>
+                            <span className="text-[9px] sm:text-[10px] font-bold text-white/20 tracking-wider">ADJUST</span>
                         </div>
                     </div>
 
                     {/* Waves Container */}
-                    <div className="flex-1 relative h-full flex items-center overflow-hidden mask-linear-fade ml-2 sm:ml-4">
-                        {/* Wave 1: Force (White Solid) */}
-                        <div className="absolute inset-y-0 left-0 w-[200%] flex items-center animate-wave-target opacity-20">
-                            <svg className="w-full h-full" viewBox="0 0 400 80" preserveAspectRatio="none">
-                                <path d="M0,40 C50,10 50,70 100,40 C150,10 150,70 200,40 C250,10 250,70 300,40 C350,10 350,70 400,40"
-                                    fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+                    <div className="flex-1 relative h-full flex items-center overflow-hidden mask-linear-fade ml-3 sm:ml-4">
+                        {/* Wave 1: Force (Faded) */}
+                        <div className="absolute inset-y-0 left-0 w-[200%] flex items-center animate-wave-target">
+                            <svg className="w-full h-16" viewBox="0 0 400 60" preserveAspectRatio="none">
+                                <path d="M0,30 C50,10 50,50 100,30 C150,10 150,50 200,30 C250,10 250,50 300,30 C350,10 350,50 400,30"
+                                    fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="2" strokeLinecap="round" />
                             </svg>
                         </div>
-                        {/* Wave 2: Response (White Dashed) */}
-                        <div className="absolute inset-y-0 left-0 w-[200%] flex items-center animate-wave-response opacity-90">
-                            <svg className="w-full h-full" viewBox="0 0 400 80" preserveAspectRatio="none">
-                                <path d="M0,40 C40,20 60,60 100,40 C140,20 160,60 200,40 C240,20 260,60 300,40 C340,20 360,60 400,40"
-                                    fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="10 8" />
+                        {/* Wave 2: Response (Bright, Dashed) */}
+                        <div className="absolute inset-y-0 left-0 w-[200%] flex items-center animate-wave-response">
+                            <svg className="w-full h-16" viewBox="0 0 400 60" preserveAspectRatio="none">
+                                <path d="M0,30 C40,15 60,45 100,30 C140,15 160,45 200,30 C240,15 260,45 300,30 C340,15 360,45 400,30"
+                                    fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="8 6" />
                             </svg>
                         </div>
-                        {/* Wave 3: Adjustments (White Dotted) */}
-                        <div className="absolute inset-y-0 left-0 w-[200%] flex items-center animate-wave-adjust opacity-15">
-                            <svg className="w-full h-full" viewBox="0 0 400 80" preserveAspectRatio="none">
-                                <path d="M0,40 C30,30 40,50 50,40 C80,30 90,50 100,40 C130,30 140,50 150,40 C180,30 190,50 200,40 
-                                  C230,30 240,50 250,40 C280,30 290,50 300,40 C330,30 340,50 350,40 C380,30 390,50 400,40"
-                                    fill="none" stroke="white" strokeWidth="1" strokeLinecap="round" strokeDasharray="1 4" />
+                        {/* Wave 3: Adjust (Very Faded) */}
+                        <div className="absolute inset-y-0 left-0 w-[200%] flex items-center animate-wave-adjust">
+                            <svg className="w-full h-16" viewBox="0 0 400 60" preserveAspectRatio="none">
+                                <path d="M0,30 C30,20 40,40 50,30 C80,20 90,40 100,30 C130,20 140,40 150,30 C180,20 190,40 200,30 
+                                  C230,20 240,40 250,30 C280,20 290,40 300,30 C330,20 340,40 350,30 C380,20 390,40 400,30"
+                                    fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="1.5" strokeLinecap="round" />
                             </svg>
                         </div>
                     </div>
                 </div>
                 
-                {/* Micro-label for dashboard */}
-                <div className="mt-1.5 flex items-center gap-1.5">
-                    <div className="w-1 h-1 rounded-full bg-brand-lightTeal animate-pulse"></div>
-                    <span className="text-[8px] sm:text-[9px] font-black text-white/30 uppercase tracking-[0.2em]">Computer-Guided Cycle Active</span>
+                {/* Status indicator */}
+                <div className="mt-2 flex items-center justify-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
+                    <span className="text-[9px] sm:text-[10px] font-medium text-white/40 tracking-wider">COMPUTER-GUIDED CYCLE ACTIVE</span>
                 </div>
             </div>
         </div>

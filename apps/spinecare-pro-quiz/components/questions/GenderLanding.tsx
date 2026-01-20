@@ -54,8 +54,8 @@ export const GenderLanding: React.FC<GenderLandingProps> = ({ config }) => {
                             Check Your Fit for Non-Surgical Spinal Decompression
                         </h1>
 
-                        <p className="text-sm font-bold tracking-widest text-white/90 uppercase mb-8">
-                            1-MINUTE TEST
+                        <p className="text-sm font-semibold tracking-wide text-white/80 mb-8">
+                            1-Minute Test
                         </p>
 
                         <div className="w-full">

@@ -31,7 +31,7 @@ export const Header: React.FC = () => {
         {/* Center: Current Section Label (Only if valid section) */}
         <div className="text-center pointer-events-none flex justify-center items-center">
           {isValidSection && config?.type !== 'info-slide' ? (
-            <span className={`font-semibold text-lg tracking-wide uppercase opacity-90 ${isLight ? 'text-brand-dark' : 'text-white'}`}>
+            <span className={`font-semibold text-base sm:text-lg tracking-wide opacity-80 ${isLight ? 'text-brand-dark' : 'text-white'}`}>
               {PROGRESS_SECTIONS.find(s => s.id === currentSectionId)?.label || ''}
             </span>
           ) : null}

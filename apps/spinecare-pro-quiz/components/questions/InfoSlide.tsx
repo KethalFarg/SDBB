@@ -2,8 +2,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { QuestionConfig } from '../../types';
-import { useQuiz } from '../../context/QuizContext';
-import { ArrowRight } from 'lucide-react';
 import { InfoBackgroundSVG } from '../ui/InfoBackgroundSVG';
 
 interface Props {
@@ -11,8 +9,6 @@ interface Props {
 }
 
 export const InfoSlide: React.FC<Props> = ({ config }) => {
-  const { nextQuestion } = useQuiz();
-  // Default to dark theme for this flow per requirements unless specified light
   const isLight = config.theme === 'light';
   const isMcClure = config.componentProps?.variant === 'mcclure-chart';
 
@@ -25,10 +21,9 @@ export const InfoSlide: React.FC<Props> = ({ config }) => {
   }, [isMcClure]);
 
   return (
-    <div className={`relative flex flex-col min-h-full ${isLight ? 'text-brand-dark' : 'text-white'}`}>
+    <div className={`relative flex flex-col h-full ${isLight ? 'text-brand-dark' : 'text-white'}`}>
 
-      {/* Animated Background */}
-      {/* Animated Background - Portal to Body to break out of containers */}
+      {/* Animated Background - Portal to Body */}
       {!isLight && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[5] pointer-events-none">
           <InfoBackgroundSVG />
@@ -36,100 +31,79 @@ export const InfoSlide: React.FC<Props> = ({ config }) => {
         document.body
       )}
 
-      {/* Content wrapper with z-index to sit above background */}
-      <div className="flex flex-col flex-1 z-10 relative">
-
-        {/* Content Area - Headline (Title) First */}
-        <div className="flex flex-col items-center text-center justify-center px-4 pt-20 sm:pt-24 pb-2 sm:pb-4">
-          <div className="mb-4 sm:mb-6 flex justify-center">
-            <img 
-              src="https://imagedelivery.net/ye6TBwd9tSy8dGYL2VHjgg/cad90d3a-cd81-431a-ea37-9ce097649e00/public" 
-              alt="SpineCare Logo" 
-              className="h-6 sm:h-8 w-auto object-contain opacity-90" 
-            />
-          </div>
-
-          <h2 className={`text-xl sm:text-2xl md:text-3xl font-black uppercase tracking-tight leading-tight ${isLight ? 'text-brand-dark' : 'text-white'}`}>
+      {/* Main Content - Scrollable with proper spacing */}
+      <div className="flex flex-col z-10 relative flex-1 overflow-y-auto">
+        
+        {/* Headline - At the top, using header space */}
+        <div className="text-center px-4 pt-2 pb-4 flex-shrink-0">
+          <h2 className={`text-xl sm:text-2xl md:text-3xl font-bold leading-tight ${isLight ? 'text-brand-dark' : 'text-white'}`}>
             {config.question}
           </h2>
-          {config.componentProps?.headlineSubtext && (
-            <p className={`mt-2 sm:mt-3 text-base sm:text-lg font-bold uppercase tracking-widest opacity-80 max-w-lg mx-auto ${isLight ? 'text-brand-teal' : 'text-brand-lightTeal'}`}>
-              {config.componentProps.headlineSubtext}
-            </p>
-          )}
         </div>
 
         {/* Visual Area */}
-        {config.componentProps?.VisualComponent ? (
-          <div className="w-full mb-1 sm:mb-4 flex items-center justify-center p-1 sm:p-4">
-            <div className="w-full max-w-[180px] sm:max-w-xl">
-              <config.componentProps.VisualComponent className="w-full h-auto text-brand-lightTeal opacity-95" />
-            </div>
-          </div>
-        ) : config.componentProps?.image && (
-          <div className="w-[70%] sm:w-full aspect-video sm:aspect-auto sm:min-h-[16rem] md:min-h-[20rem] mb-2 sm:mb-6 rounded-2xl overflow-hidden shadow-lg flex-shrink-0 relative bg-gray-900 border border-white/10 mx-auto max-w-[240px] sm:max-w-xl">
-            <img
-              src={config.componentProps.image}
-              alt="Insight"
-              className="w-full h-full object-cover opacity-80"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-brand-dark via-transparent to-transparent" />
-          </div>
-        )}
-
-        {/* McClure Chart Variant */}
-        {isMcClure && (
-          <div className="flex items-center justify-center mb-6 sm:mb-10 py-4 sm:py-6">
-            <div className="relative w-40 h-40 sm:w-48 sm:h-48 flex items-center justify-center">
-              <svg className="w-full h-full -rotate-90">
-                <circle cx="80" cy="80" r="72" className="stroke-white/10 fill-none" strokeWidth="10" />
-                <circle
-                  cx="80" cy="80" r="72"
-                  className="stroke-brand-lightTeal fill-none transition-all duration-[2000ms] ease-out"
-                  strokeWidth="10"
-                  strokeDasharray={452}
-                  strokeDashoffset={452 - (452 * progress) / 100}
-                  strokeLinecap="round"
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-4xl sm:text-5xl font-black text-white">{progress}%</span>
-                <span className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-white/60 mt-1">Improvement</span>
+        <div className="flex-shrink-0">
+          {config.componentProps?.VisualComponent ? (
+            <div className="w-full mb-3 flex items-center justify-center px-2">
+              <div className="w-full max-w-sm">
+                <config.componentProps.VisualComponent className="w-full h-auto text-brand-lightTeal opacity-95" />
               </div>
             </div>
-          </div>
-        )}
+          ) : config.componentProps?.image && (
+            <div className="w-full mb-3 px-4 flex justify-center">
+              <div className="w-full max-w-[280px] sm:max-w-xs rounded-xl overflow-hidden shadow-lg bg-gray-900/50 border border-white/10">
+                <img
+                  src={config.componentProps.image}
+                  alt="Insight"
+                  className="w-full h-auto object-contain"
+                />
+              </div>
+            </div>
+          )}
 
-        {/* Subtext Area */}
-        <div className="flex-1 flex flex-col items-center text-center px-4">
-          <p className={`text-base sm:text-lg font-medium leading-relaxed mb-4 sm:mb-6 max-w-md whitespace-pre-line ${isLight ? 'text-gray-600' : 'text-white/80'}`}>
+          {/* McClure Chart Variant */}
+          {isMcClure && (
+            <div className="flex items-center justify-center mb-4 py-2">
+              <div className="relative w-28 h-28 sm:w-40 sm:h-40 flex items-center justify-center">
+                <svg className="w-full h-full -rotate-90" viewBox="0 0 128 128">
+                  <circle cx="64" cy="64" r="58" className="stroke-white/10 fill-none" strokeWidth="8" />
+                  <circle
+                    cx="64" cy="64" r="58"
+                    className="stroke-brand-lightTeal fill-none transition-all duration-[2000ms] ease-out"
+                    strokeWidth="8"
+                    strokeDasharray={364}
+                    strokeDashoffset={364 - (364 * progress) / 100}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-2xl sm:text-4xl font-black text-white">{progress}%</span>
+                  <span className="text-[7px] sm:text-[10px] font-medium tracking-wider text-white/60 mt-0.5">IMPROVEMENT</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Subtext Area - Compact */}
+        <div className="flex flex-col items-center text-center px-4 pb-4">
+          <p className={`text-sm sm:text-base font-medium leading-relaxed mb-3 max-w-md whitespace-pre-line ${isLight ? 'text-gray-600' : 'text-white/80'}`}>
             {config.subtext}
           </p>
 
           {config.componentProps?.highlightedSubtext && (
-            <div className={`w-full max-w-md border rounded-2xl p-4 sm:p-6 mb-4 text-center relative overflow-hidden ${config.componentProps.highlightedSubtextBg || 'bg-white/5 backdrop-blur-md shadow-xl'} ${config.componentProps.highlightedSubtextBorder || 'border-white/10'}`}>
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-brand-lightTeal/30 to-transparent"></div>
-              <p className="text-base sm:text-lg font-bold text-white leading-relaxed">
+            <div className={`w-full max-w-md border rounded-xl p-3 sm:p-4 text-center relative overflow-hidden ${config.componentProps.highlightedSubtextBg || 'bg-white/5 backdrop-blur-md'} ${config.componentProps.highlightedSubtextBorder || 'border-white/20'}`}>
+              <p className="text-sm sm:text-base font-semibold text-white leading-relaxed">
                 {config.componentProps.highlightedSubtext}
               </p>
             </div>
           )}
 
           {isMcClure && (
-            <p className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-white/30 max-w-xs mx-auto pb-4">
+            <p className="text-[9px] sm:text-[10px] font-medium tracking-wider text-white/30 max-w-xs mx-auto mt-3">
               Patient-reported outcomes. Results vary. Evaluation required.
             </p>
           )}
-        </div>
-
-        {/* Footer CTA */}
-        <div className="mt-auto pt-4 sm:pt-6 w-full flex justify-center pb-6 sm:pb-8">
-          <button
-            onClick={nextQuestion}
-            className="px-10 py-4 rounded-full font-black text-lg uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-3 bg-[#fa684b] text-white border-2 border-white/20 hover:bg-[#e55d43] hover:shadow-[#fa684b]/20"
-          >
-            Continue <ArrowRight size={22} />
-          </button>
         </div>
       </div>
     </div>

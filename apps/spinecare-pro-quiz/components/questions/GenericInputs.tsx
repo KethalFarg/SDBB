@@ -126,7 +126,7 @@ export const YesNo: React.FC<Props> = ({ config }) => {
       {/* Dynamic Question Header for Yes/No (since it's not in the central config) */}
       {(questionText || config.question) && (
         <div className="text-center mb-6 sm:mb-10 md:mb-12 mt-2 sm:mt-6 flex-shrink-0">
-          <h1 className={`text-2xl sm:text-3xl md:text-4xl font-black uppercase tracking-tight leading-tight ${isLight ? 'text-brand-dark' : 'text-white drop-shadow-md'}`}>
+          <h1 className={`text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight leading-snug ${isLight ? 'text-brand-dark' : 'text-white drop-shadow-md'}`}>
             {questionText || config.question}
           </h1>
         </div>
