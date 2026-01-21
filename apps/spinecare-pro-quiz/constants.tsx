@@ -207,13 +207,11 @@ export const QUIZ_CONFIG: QuestionConfig[] = [
         theme: 'dark',
         type: 'info-slide',
         question: "You're not the only one dealing with this.",
-        subtext: "Many experience similar patterns — including flare-ups, movement sensitivity, or pain that travels.",
+        subtext: "Millions of people worldwide experience similar patterns — including flare-ups, movement sensitivity, or pain that travels.",
         componentProps: {
             VisualComponent: SocialProofIcon,
             headlineSubtext: "Back, neck, and nerve-related pain affect millions of people.",
-            highlightedSubtext: "Next, we'll map your pain pattern to see if it looks like the cases that often respond best.",
-            highlightedSubtextBorder: "border-dashed border-4 border-white/50",
-            highlightedSubtextBg: "bg-transparent shadow-none"
+            highlightedSubtext: "Next, we'll map your pain pattern to see if it looks like the cases that often respond best."
         },
         next: 'avg-pain'
     },
@@ -368,13 +366,11 @@ export const QUIZ_CONFIG: QuestionConfig[] = [
         id: 'info-nerve',
         theme: 'dark',
         type: 'info-slide',
-        question: "Surgery isn’t the first question good clinicians ask.",
-        subtext: "When symptoms follow movement or nerve-related patterns, clinicians often start by asking how the spine is functioning — not how to remove or block symptoms.",
+        question: "Surgery isn't the first question good clinicians ask.",
+        subtext: "When symptoms tie to movement or nerves, the first question is spinal function—not how to block what you're feeling.",
         componentProps: {
             VisualComponent: SurgeryIcon,
-            highlightedSubtext: "Low-risk, reversible approaches are commonly evaluated before invasive options are considered.",
-            highlightedSubtextBorder: "border-dashed border-4 border-white/50",
-            highlightedSubtextBg: "bg-transparent shadow-none"
+            highlightedSubtext: "Low-risk, effective approaches are commonly evaluated before invasive options are considered."
         },
         next: 'sleep-disruption'
     },
@@ -443,12 +439,10 @@ export const QUIZ_CONFIG: QuestionConfig[] = [
         theme: 'dark',
         type: 'info-slide',
         question: "Spinal rehabilitation isn't about force. It's about response and adjustment.",
-        subtext: "Spinal decompression uses computer-guided cycles tailored in real time to each patient — designed to reduce abnormal stress, restore motion, and improve how spinal tissues tolerate movement.",
+        subtext: "Computer-guided pumping cycles adapt in real time to each patient, minimizing protective muscle guarding and allowing the local environment to change.",
         componentProps: {
             VisualComponent: SpinalRehabIcon,
-            highlightedSubtext: "For many patients, changing the mechanical environment of the spine is what allows lasting improvement, not just temporary relief.",
-            highlightedSubtextBorder: "border-dashed border-4 border-white/50",
-            highlightedSubtextBg: "bg-transparent shadow-none"
+            highlightedSubtext: "For many patients, changing the mechanical environment of the spine is what allows lasting improvement, not just temporary relief."
         },
         next: 'activity-goal'
     },
@@ -535,9 +529,7 @@ export const QUIZ_CONFIG: QuestionConfig[] = [
         subtext: "Many patients find that spinal decompression is more affordable than they expected, especially when compared to the long-term costs of surgery or ongoing medication.",
         componentProps: {
             VisualComponent: DollarSign,
-            highlightedSubtext: "We offer flexible payment options and work with you to make relief accessible.",
-            highlightedSubtextBorder: "border-dashed border-4 border-white/50",
-            highlightedSubtextBg: "bg-transparent shadow-none"
+            highlightedSubtext: "We offer flexible payment options and work with you to make relief accessible."
         },
         next: 'name-email-capture'
     },
@@ -549,9 +541,7 @@ export const QUIZ_CONFIG: QuestionConfig[] = [
         subtext: "Spinal decompression is a non-surgical, non-invasive therapy. Our computer-guided systems are designed to be gentle and precisely targeted to your needs.",
         componentProps: {
             VisualComponent: Shield,
-            highlightedSubtext: "Most patients find the treatments relaxing, with no recovery time needed afterward.",
-            highlightedSubtextBorder: "border-dashed border-4 border-white/50",
-            highlightedSubtextBg: "bg-transparent shadow-none"
+            highlightedSubtext: "Most patients find the treatments relaxing, with no recovery time needed afterward."
         },
         next: 'name-email-capture'
     },
@@ -563,9 +553,7 @@ export const QUIZ_CONFIG: QuestionConfig[] = [
         subtext: "By addressing the underlying mechanical stress on your discs and nerves, decompression helps the body actually restore function rather than just masking symptoms.",
         componentProps: {
             VisualComponent: ThumbsUp,
-            highlightedSubtext: "This approach is often successful even for patients who haven't found relief through other conservative care.",
-            highlightedSubtextBorder: "border-dashed border-4 border-white/50",
-            highlightedSubtextBg: "bg-transparent shadow-none"
+            highlightedSubtext: "This approach is often successful even for patients who haven't found relief through other conservative care."
         },
         next: 'name-email-capture'
     },
@@ -577,9 +565,7 @@ export const QUIZ_CONFIG: QuestionConfig[] = [
         subtext: "Each session is brief, and because there is no downtime or recovery period, you can stay active at work and with your family throughout your program.",
         componentProps: {
             VisualComponent: Clock,
-            highlightedSubtext: "We offer convenient scheduling to ensure your treatment plan works with your busy routine.",
-            highlightedSubtextBorder: "border-dashed border-4 border-white/50",
-            highlightedSubtextBg: "bg-transparent shadow-none"
+            highlightedSubtext: "We offer convenient scheduling to ensure your treatment plan works with your busy routine."
         },
         next: 'name-email-capture'
     },

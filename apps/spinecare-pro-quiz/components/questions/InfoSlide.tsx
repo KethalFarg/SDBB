@@ -92,10 +92,20 @@ export const InfoSlide: React.FC<Props> = ({ config }) => {
           </p>
 
           {config.componentProps?.highlightedSubtext && (
-            <div className={`w-full max-w-md border rounded-xl p-3 sm:p-4 text-center relative overflow-hidden ${config.componentProps.highlightedSubtextBg || 'bg-white/5 backdrop-blur-md'} ${config.componentProps.highlightedSubtextBorder || 'border-white/20'}`}>
-              <p className="text-sm sm:text-base font-semibold text-white leading-relaxed">
-                {config.componentProps.highlightedSubtext}
-              </p>
+            <div className="w-full max-w-md relative group">
+              {/* Soft glow behind the card */}
+              <div className="absolute -inset-1.5 bg-gradient-to-r from-[#2FBFC9]/30 to-[#0BA5B5]/20 rounded-3xl blur-md opacity-60 group-hover:opacity-80 transition duration-500"></div>
+              
+              <div className={`relative rounded-2xl py-3 px-5 sm:py-4 sm:px-6 text-center overflow-hidden transition-all duration-500 hover:scale-[1.01] ${config.componentProps.highlightedSubtextBg || 'bg-gradient-to-br from-[#1A9AAD]/95 via-[#1AAFB8]/90 to-[#2BBFC7]/85 shadow-2xl shadow-black/30 backdrop-blur-sm'} ${config.componentProps.highlightedSubtextBorder || 'border border-white/20'}`}>
+                {/* Subtle top-light highlight */}
+                <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent"></div>
+                {/* Bottom subtle shadow line */}
+                <div className="absolute bottom-0 left-0 right-0 h-px bg-black/10"></div>
+                
+                <p className="text-sm sm:text-[17px] font-bold text-white leading-relaxed tracking-tight drop-shadow-sm">
+                  {config.componentProps.highlightedSubtext}
+                </p>
+              </div>
             </div>
           )}
 
