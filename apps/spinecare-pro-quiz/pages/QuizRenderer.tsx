@@ -114,8 +114,8 @@ export const QuizRenderer: React.FC = () => {
 
       {showHeader && <Header />}
 
-      <main className={`relative z-10 w-full ${isScrollablePage || config.type === 'gender-landing' || (config.type === 'form' && config.componentProps?.formType === 'name-email') ? 'max-w-full px-0 pt-0' : config.type === 'info-slide' ? 'max-w-2xl mx-auto px-4 sm:px-6 pt-[60px] sm:pt-[70px]' : 'max-w-2xl mx-auto px-4 sm:px-6 pt-[100px] sm:pt-[120px]'} flex-1 flex flex-col min-h-0`}>
-        <div key={config.id} className={`animate-fade-in flex flex-col flex-1 ${config.type === 'gender-landing' ? '' : config.type === 'info-slide' ? '' : 'justify-center py-4 sm:py-8'}`}>
+      <main className={`relative z-10 w-full ${isScrollablePage || config.type === 'gender-landing' || (config.type === 'form' && config.componentProps?.formType === 'name-email') ? 'max-w-full px-0 pt-0' : config.type === 'info-slide' ? 'max-w-2xl mx-auto px-4 sm:px-6 pt-[60px] sm:pt-[70px]' : config.type === 'yes-no' ? 'max-w-2xl mx-auto px-4 sm:px-6 pt-[80px] sm:pt-[90px]' : 'max-w-2xl mx-auto px-4 sm:px-6 pt-[100px] sm:pt-[120px]'} flex-1 flex flex-col min-h-0`}>
+        <div key={config.id} className={`animate-fade-in flex flex-col flex-1 ${config.type === 'gender-landing' ? '' : config.type === 'info-slide' ? '' : config.type === 'yes-no' ? 'pt-0' : 'justify-center py-4 sm:py-8'}`}>
           {/* Question Text Header - Skip for info-slide (handles its own headline) */}
           {(!isResultScreen && config.question && config.type !== 'loading' && config.type !== 'medical-exit' && config.type !== 'phone-capture' && config.type !== 'pain-profile' && config.type !== 'gender-landing' && config.type !== 'yes-no' && config.type !== 'info-slide') && (
             <div className="text-center mb-6 sm:mb-10 md:mb-12 mt-2 sm:mt-6 flex-shrink-0">
