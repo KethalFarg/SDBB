@@ -39,7 +39,7 @@ export const PainSlider: React.FC<Props> = ({ config }) => {
   return (
     <div className="w-full py-4 flex flex-col items-center">
       {/* Pain Value Display with Vector Background - Reduced by ~20% (w-64 -> w-52) */}
-      <div className={`relative w-52 mx-auto mb-6 ${config.id === 'worst-pain' ? 'aspect-[69/77]' : 'aspect-[52/71]'}`}>
+      <div className={`relative w-52 mx-auto mb-6 pointer-events-none select-none ${config.id === 'worst-pain' ? 'aspect-[69/77]' : 'aspect-[52/71]'}`}>
         <img
           src={config.id === 'worst-pain' ? "/pain2.svg" : "/pain1.svg"}
           alt=""
@@ -75,8 +75,11 @@ export const PainSlider: React.FC<Props> = ({ config }) => {
             max="10"
             value={val}
             onChange={handleChange}
-            style={{ touchAction: 'none' }}
-            className="absolute w-full h-16 -top-6 opacity-0 cursor-pointer z-20"
+            style={{ 
+              touchAction: 'none',
+              WebkitTapHighlightColor: 'transparent'
+            }}
+            className="absolute w-full h-16 -top-6 opacity-0 cursor-pointer z-20 touch-none"
           />
           {/* Thumb */}
           <div
