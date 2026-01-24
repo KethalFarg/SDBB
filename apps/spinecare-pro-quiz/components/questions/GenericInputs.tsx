@@ -60,8 +60,8 @@ export const FullButtons: React.FC<Props> = ({ config }) => {
   return (
     <div className={`w-full overflow-visible relative z-10 ${config.componentProps?.gridLayout ? 'grid grid-cols-2 gap-3' : 'flex flex-col gap-3'}`}>
       {config.componentProps?.VisualComponent ? (
-        <div className={`w-full flex justify-center py-2 mb-2 ${config.componentProps?.gridLayout ? 'col-span-2' : ''}`}>
-          <config.componentProps.VisualComponent className="w-full h-32 md:h-48 object-contain text-[#0590a8]" />
+        <div className={`w-full flex justify-center py-2 mb-0 sm:mb-2 ${config.componentProps?.gridLayout ? 'col-span-2' : ''}`}>
+          <config.componentProps.VisualComponent className="w-full h-56 md:h-84 object-contain text-[#0590a8]" />
         </div>
       ) : config.componentProps?.showLifeImage && (
         <div className="w-[140%] relative left-1/2 -translate-x-1/2 -mt-20 -mb-4 pointer-events-none select-none"
