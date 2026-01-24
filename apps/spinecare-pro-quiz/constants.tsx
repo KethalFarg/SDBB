@@ -439,7 +439,7 @@ export const QUIZ_CONFIG: QuestionConfig[] = [
         theme: 'dark',
         type: 'info-slide',
         question: "Spinal rehabilitation isn't about force. It's about response and adjustment.",
-        subtext: "Computer-guided pumping cycles adapt in real time to each patient, minimizing protective muscle guarding and allowing the local environment to change.",
+        subtext: "Computer-guided pumping cycles adapt in real time to each patient, minimizing protective muscle guarding and allowing the local environment to safely change.",
         componentProps: {
             VisualComponent: SpinalRehabIcon,
             highlightedSubtext: "For many patients, changing the mechanical environment of the spine is what allows lasting improvement, not just temporary relief."
