@@ -133,8 +133,8 @@ export const YesNo: React.FC<Props> = ({ config }) => {
       )}
 
       {config.componentProps?.VisualComponent && (
-        <div className="w-full flex justify-center py-4">
-          <config.componentProps.VisualComponent className="w-full h-auto max-h-48 text-[#0590a8]" />
+        <div className="w-full flex justify-center py-2 sm:py-4">
+          <config.componentProps.VisualComponent className="w-full h-auto max-h-36 sm:max-h-48 text-[#0590a8]" />
         </div>
       )}
 
