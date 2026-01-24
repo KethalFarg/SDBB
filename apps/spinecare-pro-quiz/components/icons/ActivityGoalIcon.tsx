@@ -10,9 +10,7 @@ const ActivityGoalIcon: React.FC<{ className?: string }> = ({ className = "w-ful
                 style={{
                     WebkitTransform: 'translateZ(0)',
                     transform: 'translateZ(0)',
-                    backfaceVisibility: 'hidden',
-                    WebkitBackfaceVisibility: 'hidden',
-                    background: 'transparent'
+                    isolation: 'isolate'
                 }}
             />
         </div>

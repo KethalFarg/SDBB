@@ -26,17 +26,21 @@ const SpinalRehabIcon: React.FC<{ className?: string }> = ({ className = "w-full
 
             {/* Main Image: Patient on Table */}
             <div className="relative w-full flex justify-center items-center">
-                <img
-                    src="https://imagedelivery.net/ye6TBwd9tSy8dGYL2VHjgg/44539b0f-20a6-466d-fda3-7dacef32a900/public"
-                    alt="Spinal decompression table"
-                    className="w-full max-w-[260px] sm:max-w-[340px] h-auto object-contain"
+                <div 
+                    className="w-full max-w-[260px] sm:max-w-[340px] aspect-[4/3]"
                     style={{
-                        WebkitTransform: 'translateZ(0)',
-                        transform: 'translateZ(0)',
-                        backfaceVisibility: 'hidden',
-                        WebkitBackfaceVisibility: 'hidden',
-                        background: 'transparent'
+                        backgroundColor: 'white',
+                        WebkitMaskImage: 'url(https://imagedelivery.net/ye6TBwd9tSy8dGYL2VHjgg/44539b0f-20a6-466d-fda3-7dacef32a900/public)',
+                        maskImage: 'url(https://imagedelivery.net/ye6TBwd9tSy8dGYL2VHjgg/44539b0f-20a6-466d-fda3-7dacef32a900/public)',
+                        WebkitMaskRepeat: 'no-repeat',
+                        maskRepeat: 'no-repeat',
+                        WebkitMaskPosition: 'center',
+                        maskPosition: 'center',
+                        WebkitMaskSize: 'contain',
+                        maskSize: 'contain'
                     }}
+                    role="img"
+                    aria-label="Spinal decompression table"
                 />
             </div>
 
