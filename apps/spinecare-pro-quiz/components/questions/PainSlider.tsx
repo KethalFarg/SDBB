@@ -43,7 +43,7 @@ export const PainSlider: React.FC<Props> = ({ config }) => {
         <img
           src={config.id === 'worst-pain' ? "/pain2.svg" : "/pain1.svg"}
           alt=""
-          className={`w-full h-full object-contain shadow-lg transition-transform duration-300 ${config.id === 'worst-pain' ? '-translate-x-[19%] scale-[1.27]' : ''}`}
+          className={`w-full h-full object-contain transition-transform duration-300 ${config.id === 'worst-pain' ? '-translate-x-[19%] scale-[1.27]' : ''}`}
           style={{
             WebkitTransform: config.id === 'worst-pain' ? 'translateX(-19%) scale(1.27) translateZ(0)' : 'translateZ(0)',
             backfaceVisibility: 'hidden',
