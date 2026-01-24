@@ -330,7 +330,7 @@ export const QUIZ_CONFIG: QuestionConfig[] = [
         question: "What have you already tried for this?",
         multiSelect: true,
         options: [
-            { value: 'Physical therapy', label: 'Physical therapy', icon: HeartHandshake },
+            { value: 'Physical therapy', label: 'Physical therapy', icon: PhysicalTherapyIcon },
             { value: 'Chiropractic', label: 'Chiropractic', icon: ChiropracticIcon },
             { value: 'Injections', label: 'Injections', icon: Syringe },
             { value: 'Pain medication', label: 'Pain medication', icon: Pill },
