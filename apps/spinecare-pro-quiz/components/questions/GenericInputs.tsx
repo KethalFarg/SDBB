@@ -122,10 +122,10 @@ export const YesNo: React.FC<Props> = ({ config }) => {
   };
 
   return (
-    <div className="flex flex-col gap-3 w-full max-w-md mx-auto">
+    <div className="flex flex-col gap-2 w-full max-w-md mx-auto">
       {/* Dynamic Question Header for Yes/No (since it's not in the central config) */}
       {(questionText || config.question) && (
-        <div className="text-center mb-2 sm:mb-4 flex-shrink-0">
+        <div className="text-center mb-1 sm:mb-2 flex-shrink-0">
           <h1 className={`text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight leading-snug ${isLight ? 'text-brand-dark' : 'text-white drop-shadow-md'}`}>
             {questionText || config.question}
           </h1>
@@ -133,7 +133,7 @@ export const YesNo: React.FC<Props> = ({ config }) => {
       )}
 
       {config.componentProps?.VisualComponent && (
-        <div className="w-full flex justify-center py-1 sm:py-2">
+        <div className="w-full flex justify-center py-0 sm:py-1">
           <config.componentProps.VisualComponent className="w-full h-auto max-h-36 sm:max-h-48 text-[#0590a8]" />
         </div>
       )}
@@ -143,7 +143,7 @@ export const YesNo: React.FC<Props> = ({ config }) => {
           <img
             src={config.componentProps.image}
             alt="Reference"
-            className="w-[80%] h-auto max-h-60 object-contain rounded-xl shadow-sm mix-blend-multiply dark:mix-blend-normal"
+            className="w-[80%] h-auto max-h-60 object-contain rounded-xl shadow-sm"
           />
         </div>
       )}

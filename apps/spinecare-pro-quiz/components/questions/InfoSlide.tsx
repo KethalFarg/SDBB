@@ -46,7 +46,7 @@ export const InfoSlide: React.FC<Props> = ({ config }) => {
           {config.componentProps?.VisualComponent ? (
             <div className="w-full mb-3 flex items-center justify-center px-2">
               <div className="w-full max-w-sm">
-                <config.componentProps.VisualComponent className="w-full h-auto text-brand-lightTeal opacity-95" />
+                <config.componentProps.VisualComponent className="w-full h-auto text-brand-lightTeal" />
               </div>
             </div>
           ) : config.componentProps?.image && (

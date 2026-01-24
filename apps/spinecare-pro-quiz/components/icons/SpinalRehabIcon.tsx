@@ -29,7 +29,7 @@ const SpinalRehabIcon: React.FC<{ className?: string }> = ({ className = "w-full
                 <img
                     src="https://imagedelivery.net/ye6TBwd9tSy8dGYL2VHjgg/44539b0f-20a6-466d-fda3-7dacef32a900/public"
                     alt="Spinal decompression table"
-                    className="w-full max-w-[260px] sm:max-w-[340px] h-auto object-contain opacity-95 drop-shadow-lg"
+                    className="w-full max-w-[260px] sm:max-w-[340px] h-auto object-contain"
                 />
             </div>
 

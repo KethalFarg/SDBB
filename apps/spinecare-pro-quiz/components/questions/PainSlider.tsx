@@ -39,11 +39,11 @@ export const PainSlider: React.FC<Props> = ({ config }) => {
   return (
     <div className="w-full py-4 flex flex-col items-center">
       {/* Pain Value Display with Vector Background - Reduced by ~20% (w-64 -> w-52) */}
-      <div className={`relative w-52 mx-auto mb-6 pointer-events-none select-none ${config.id === 'worst-pain' ? 'aspect-[69/77]' : 'aspect-[52/71]'}`}>
+      <div className={`relative w-52 mx-auto mb-6 pointer-events-none ${config.id === 'worst-pain' ? 'aspect-[69/77]' : 'aspect-[52/71]'}`}>
         <img
           src={config.id === 'worst-pain' ? "/pain2.svg" : "/pain1.svg"}
           alt=""
-          className={`w-full h-full object-contain drop-shadow-xl transition-transform duration-300 ${config.id === 'worst-pain' ? '-translate-x-[19%] scale-[1.27]' : ''}`}
+          className={`w-full h-full object-contain shadow-lg transition-transform duration-300 ${config.id === 'worst-pain' ? '-translate-x-[19%] scale-[1.27]' : ''}`}
         />
 
         {/* Overlay Text positioned on the white board area */}
